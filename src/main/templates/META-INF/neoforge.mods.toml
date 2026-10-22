@@ -1,0 +1,34 @@
+modLoader="javafml"
+loaderVersion="${loader_version_range}"
+license="${mod_license}"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+authors="Ranger3462"
+description='''
+A mining dimension that resets on a schedule, so the overworld doesn't have to be strip-mined. Build a portal frame of
+deepslate bricks, light it, and dig to your heart's content.
+'''
+
+[[dependencies.${mod_id}]]
+    modId="neoforge"
+    type="required"
+    versionRange="[${neo_version},)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="minecraft"
+    type="required"
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="cpapireforged"
+    type="required"
+    versionRange="*"
+    ordering="AFTER"
+    side="BOTH"

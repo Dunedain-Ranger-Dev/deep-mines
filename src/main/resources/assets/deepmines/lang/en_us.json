@@ -1,0 +1,7 @@
+{
+  "message.deepmines.arrive": "You step out into the Mines. The portal leads back.",
+  "message.deepmines.reset_in": "The Mines collapse at the first restart after %s days and %s hours from now. Anything left down here will be lost.",
+  "message.deepmines.reset_next": "The Mines collapse the next time the server restarts. Anything left down here will be lost.",
+  "message.deepmines.collapsed": "The Mines collapsed while you were away. You wake up at your spawn point.",
+  "message.deepmines.reset_scheduled": "The Mines will reset the next time the server starts."
+}

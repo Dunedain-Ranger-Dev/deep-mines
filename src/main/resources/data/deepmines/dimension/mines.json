@@ -1,0 +1,11 @@
+{
+  "type": "deepmines:mines",
+  "generator": {
+    "type": "minecraft:noise",
+    "settings": "minecraft:caves",
+    "biome_source": {
+      "type": "minecraft:multi_noise",
+      "preset": "minecraft:overworld"
+    }
+  }
+}
