@@ -12,16 +12,16 @@ version = mod_version
 group = mod_group_id
 
 repositories {
-    // Modrinth's Maven, for Custom Portal API Reforged (the portal) and dev-only test mods.
+    // CurseMaven: mods from CurseForge, for Custom Portal API Reforged (the portal).
     exclusiveContent {
         forRepository {
             maven {
-                name = "Modrinth"
-                url = "https://api.modrinth.com/maven"
+                name = "CurseMaven"
+                url = "https://cursemaven.com"
             }
         }
         filter {
-            includeGroup "maven.modrinth"
+            includeGroup "curse.maven"
         }
     }
 }
@@ -69,7 +69,7 @@ neoForge {
 
 dependencies {
     // Custom Portal API Reforged: the Mines portal (a nether-style portal with our own frame). Required at runtime.
-    implementation "maven.modrinth:custom-portal-api-reforged:lowfyLfO" // cpapireforged-neo-1.21.1-1.2.2
+    implementation "curse.maven:custom-portal-api-reforged-902717:6744404" // cpapireforged-neo-1.21.1-1.2.2
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
