@@ -23,6 +23,10 @@ Where the mod is headed: [the design doc](docs/design/deep-mines.md).
 
 - NeoForge 21.1.259 or later for Minecraft 1.21.1
 - [Custom Portal API Reforged](https://modrinth.com/mod/custom-portal-api-reforged) (the portal)
+- [Dungeon Delving](https://github.com/Dunedain-Ranger-Dev/dungeon-delving) (builds the Mines' floors), and Apotheosis,
+  which it needs
+
+To build, check out dungeon-delving next to this repository; Gradle builds it from source.
 
 ## Building
 
