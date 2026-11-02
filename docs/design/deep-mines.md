@@ -89,9 +89,20 @@ Built in 0.1.0 (MINE-2 to MINE-4), not yet tested in game:
    - The capital, standing and the entrance moved to Kingdom Sim (KING-18). The portal setting stays here (MINE-26).
 2. **Depending on Dungeon Delving.** Deep Mines works on its own today. Building the floors with Dungeon Delving's
    generator makes it a required dependency, unless the generator moves into a shared library.
-   - **Decided:** Dungeon Delving is a required dependency.
+   - **Decided:** Dungeon Delving is a required dependency. Deep Mines loads its own pieces from
+     `data/deepmines/structure/mines/` through Dungeon Delving's `DungeonPieces`, and builds them with its layout
+     generator, builder and build queue (`MinesFloors`, MINE-13).
 3. **Better Mineshafts corridors.** YUNG's mineshafts are built by its own structure code, so its corridors may not
    be reusable as pieces. If not, we build our own corridor pieces in that style.
+   - **Answered (MINE-12): we build our own.** Better Mineshafts 5.1.1 has no template files: every corridor, turn
+     and side room is drawn block by block in Java (`SmallTunnel`, `BigTunnel` and the rest), sized as it goes and
+     carved into whatever stone is there. Its pieces aren't an API, and each needs its own mineshaft config and
+     YUNG's API, so placing one inside our grid would break with any update. Its license (LGPL-3.0) isn't the
+     problem. Our corridors are ordinary `tunnel_` pieces (9 x 9 x 33), built by hand in its style: plank floors,
+     log legs and fence supports, rails, the odd chest minecart. Its per-biome block palettes in
+     `data/bettermineshafts/worldgen/structure/` (oak, spruce, jungle, mesa and so on) are a good guide to the look.
+   - While the Mines use overworld biomes and cave terrain, Better Mineshafts' own mineshafts probably generate in
+     them too. That goes away when the floors replace the terrain (MINE-16), which should turn structures off.
 4. **Ore below floor 3.** How many floors are there, and where do gold, redstone, lapis, diamond and the dwarves'
    rare ore come in?
    - **Decided:** 100 floors, following vanilla's ore by height from Y 64 down (see [Ore by floor](#ore-by-floor)).

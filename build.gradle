@@ -12,7 +12,19 @@ version = mod_version
 group = mod_group_id
 
 repositories {
-    // CurseMaven: mods from CurseForge, for Custom Portal API Reforged (the portal).
+    // MixinSquared, which Dungeon Delving bundles.
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "Bawnorton"
+                url = "https://maven.bawnorton.com/releases"
+            }
+        }
+        filter {
+            includeGroup "com.github.bawnorton.mixinsquared"
+        }
+    }
+    // CurseMaven: mods from CurseForge, for Custom Portal API Reforged (the portal) and Apotheosis (which Dungeon Delving needs).
     exclusiveContent {
         forRepository {
             maven {
@@ -67,9 +79,27 @@ neoForge {
     }
 }
 
+// Sets up a dependency configuration called 'localRuntime': mods loaded in dev runs and game tests, but left out of
+// this mod's published dependencies (Dungeon Delving is declared in neoforge.mods.toml instead).
+configurations {
+    runtimeClasspath.extendsFrom localRuntime
+}
+
+// Dungeon Delving: its layout generator and builder build the Mines' floors (see settings.gradle).
+def dungeonDelving = 'io.github.ranger3462.dungeondelving:dungeon-delving'
+
 dependencies {
     // Custom Portal API Reforged: the Mines portal (a nether-style portal with our own frame). Required at runtime.
     implementation "curse.maven:custom-portal-api-reforged-902717:6744404" // cpapireforged-neo-1.21.1-1.2.2
+
+    compileOnly dungeonDelving
+    if (!gradle.startParameter.taskNames.any { it.toLowerCase().contains('rundata') }) {
+        localRuntime dungeonDelving
+        // Apotheosis and its libraries, which Dungeon Delving requires. Versions match the pack's pack.json.
+        localRuntime "curse.maven:apotheosis-313970:8993983"                 // 1.21.1-8.9.0
+        localRuntime "curse.maven:placebo-283644:9153039"                    // 1.21.1-9.9.4
+        localRuntime "curse.maven:apothic-attributes-898963:9006294"         // 1.21.1-2.11.0
+    }
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {

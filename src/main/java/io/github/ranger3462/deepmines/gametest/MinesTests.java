@@ -1,5 +1,7 @@
 package io.github.ranger3462.deepmines.gametest;
 
+import static io.github.ranger3462.dungeondelving.dungeon.RoomSpec.*;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,8 +13,14 @@ import com.mojang.serialization.JsonOps;
 
 import io.github.ranger3462.deepmines.DeepMines;
 import io.github.ranger3462.deepmines.InMinesPlacement;
+import io.github.ranger3462.deepmines.MinesFloors;
 import io.github.ranger3462.deepmines.MinesPortal;
 import io.github.ranger3462.deepmines.MinesReset;
+import io.github.ranger3462.dungeondelving.dungeon.DungeonMarkers;
+import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonBuildQueue;
+import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonBuilder;
+import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonBuilder.Placement;
+import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonLayout.Cell;
 import net.kyrptonaught.customportalapi.CustomPortalApiRegistry;
 import net.kyrptonaught.customportalapi.util.PortalLink;
 import net.minecraft.core.BlockPos;
@@ -21,6 +29,10 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.placement.PlacedFeature;
 import net.minecraft.world.level.levelgen.placement.PlacementContext;
@@ -28,7 +40,7 @@ import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
-/** Checks the Mines: the dimension's data, the portal, and the reset schedule. */
+/** Checks the Mines: the dimension's data, the portal, the reset schedule, and building floors. */
 @GameTestHolder(DeepMines.MODID)
 @PrefixGameTestTemplate(false)
 public class MinesTests {
@@ -93,6 +105,36 @@ public class MinesTests {
         helper.assertFalse(MinesReset.due(last, last + 700 * DAY, 0), "0 days turns resets off");
         helper.assertTrue(MinesReset.untilDue(last, last + 5 * DAY, 7) == 2 * DAY, "two days should be left");
         helper.succeed();
+    }
+
+    /**
+     * A floor is a Dungeon Delving layout built from the Mines' own pieces. The Mines have no boss or challenge rooms,
+     * so those slots get caves. The test server has no Mines dimension, so this builds in the test level.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void floorsBuildFromTheMinesOwnPieces(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos center = helper.absolutePos(BlockPos.ZERO).above(120);
+        List<Placement> placements = MinesFloors.plan(level.getServer(), center, 3, RandomSource.create(1));
+        for (Placement placement : placements) {
+            helper.assertTrue(placement.template().getNamespace().equals(DeepMines.MODID)
+                    && placement.template().getPath().startsWith(MinesFloors.PIECES + "/"), "every piece should be the Mines' own: " + placement.template());
+        }
+        int region = -1;
+        DungeonBuildQueue.add(level.dimension(), region, placements, DungeonMarkers.Rolls.fromConfig(1));
+        BlockPos first = DungeonBuilder.roomMin(center, Cell.ORIGIN);
+        helper.succeedWhen(() -> {
+            helper.assertTrue(DungeonBuildQueue.pending(level.dimension(), region) == 0, "the queue should finish the floor");
+            helper.assertFalse(level.getBlockState(first).isAir(), "the first cave's floor should be built");
+            helper.assertFalse(level.getBlockState(first.offset(ROOM_SIZE - 1, ROOM_HEIGHT - 1, ROOM_SIZE - 1)).isAir(), "and its far ceiling corner");
+            // Every piece fits in a room-sized box from its corner, whichever way it's turned.
+            for (Placement placement : placements) {
+                BlockPos min = placement.targetMin();
+                for (BlockPos pos : BlockPos.betweenClosed(min, min.offset(ROOM_SIZE - 1, ROOM_HEIGHT - 1, ROOM_SIZE - 1))) {
+                    level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+                }
+            }
+        });
     }
 
     @GameTest(template = EMPTY)
