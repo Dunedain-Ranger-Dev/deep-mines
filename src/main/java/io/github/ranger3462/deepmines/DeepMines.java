@@ -23,6 +23,7 @@ public class DeepMines {
         container.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
         modBus.addListener(MinesPortal::register);
         InMinesPlacement.register(modBus);
+        ModBlocks.register(modBus);
     }
 
     public static ResourceLocation id(String path) {

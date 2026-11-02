@@ -18,6 +18,11 @@ A living space where players go to gather resources on a more frequent schedule 
 - **Built with Dungeon Delving's generator:** caves, linked by corridors in the style of YUNG's Better Mineshafts.
 - **Floors.** 100 of them. Each floor has a couple of caves and corridors, then a ladder down to the next. The deeper
   the floor, the better its ore (see [Ore by floor](#ore-by-floor)).
+  - **Decided (MINE-14):** floors sit side by side, each in its own 1024-block stretch of the Mines east of the last,
+    rather than stacked (100 stacked floors would need a dimension about 1,600 blocks tall). The ladder down in a
+    floor's farthest cave takes players to the next floor's first cave, where a ladder up leads back.
+  - A floor is built the first time someone reaches it, so floors no one gets to cost nothing. Floor 1 is reached with
+    `/deepmines floor` for now; the portal leads there once the arrival room exists (MINE-15).
 - **Infested caves.** Hostile mobs hold the caves: players fight them first, then mine freely.
   - Mostly undead, plus natural hostile cave creatures (to be decided: things like cave fishers).
   - No natural spawning. Mobs come from Dungeon Delving's common-room spawning (mob markers in the cave pieces).
@@ -70,6 +75,8 @@ the `deepmines:in_mines` filter).
 | Setting | Default | What it does |
 |---|---|---|
 | Reset frequency | 7 days | How often the Mines reset |
+| Floors | 100 | How many floors the Mines go down (`floors`) |
+| Caves per floor | 3 | How many caves each floor has (`cavesPerFloor`) |
 | Team Mines | Off (server-wide) | Ties the Mines to each FTB Team or party instead, to prevent griefing |
 | Ore modifier | 1.0 | A global multiplier on how often ore appears |
 

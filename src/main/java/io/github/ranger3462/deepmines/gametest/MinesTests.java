@@ -7,13 +7,17 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import com.google.gson.JsonParser;
+import com.mojang.authlib.GameProfile;
 import com.mojang.serialization.JsonOps;
 
 import io.github.ranger3462.deepmines.DeepMines;
 import io.github.ranger3462.deepmines.InMinesPlacement;
 import io.github.ranger3462.deepmines.MinesFloors;
+import io.github.ranger3462.deepmines.MinesFloorsData;
+import io.github.ranger3462.deepmines.ModBlocks;
 import io.github.ranger3462.deepmines.MinesPortal;
 import io.github.ranger3462.deepmines.MinesReset;
 import io.github.ranger3462.dungeondelving.dungeon.DungeonMarkers;
@@ -30,6 +34,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -37,6 +42,7 @@ import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.placement.PlacedFeature;
 import net.minecraft.world.level.levelgen.placement.PlacementContext;
 import net.neoforged.fml.ModList;
+import net.neoforged.neoforge.common.util.FakePlayerFactory;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -146,6 +152,40 @@ public class MinesTests {
                 }
             }
         });
+    }
+
+    /**
+     * Floors sit side by side and are built when first reached: floor 1 has a ladder down in its farthest cave, floor 2
+     * a ladder up in its first, and the ladders take a player down and back up. Built in the test level, as the test
+     * server has no Mines.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void laddersLinkTheFloors(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinesFloorsData.get(level).clear();
+        BlockPos base = helper.absolutePos(BlockPos.ZERO).above(150);
+
+        MinesFloorsData.Floor one = MinesFloors.floor(level, base, 1);
+        helper.assertTrue(level.getBlockState(one.ladderDown()).is(ModBlocks.LADDER_DOWN.get()), "floor 1 has a ladder down");
+        helper.assertFalse(level.getBlockState(one.ladderUp()).is(ModBlocks.LADDER_UP.get()), "but no ladder up");
+        helper.assertTrue(MinesFloorsData.get(level).floor(2).isEmpty(), "floor 2 isn't built until someone goes down");
+
+        ServerPlayer player = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "mines_tester"));
+        Optional<BlockPos> down = MinesFloors.descend(player, level, base, 1);
+        MinesFloorsData.Floor two = MinesFloorsData.get(level).floor(2).orElseThrow();
+        helper.assertTrue(level.getBlockState(two.ladderUp()).is(ModBlocks.LADDER_UP.get()), "floor 2 has a ladder up");
+        helper.assertTrue(level.getBlockState(two.ladderDown()).is(ModBlocks.LADDER_DOWN.get()), "and a ladder down");
+        helper.assertTrue(MinesFloors.floorAt(base, two.ladderDown()) == 2 && MinesFloors.floorAt(base, one.ladderDown()) == 1,
+                "each ladder knows its floor");
+        helper.assertTrue(down.equals(Optional.of(two.arrivalFromAbove())), "going down lands beside floor 2's ladder up: " + down);
+        helper.assertTrue(level.getBlockState(two.arrivalFromAbove()).isAir() && level.getBlockState(two.arrivalFromAbove().above()).isAir(),
+                "with room to stand");
+
+        Optional<BlockPos> up = MinesFloors.ascend(player, level, base, 2);
+        helper.assertTrue(up.equals(Optional.of(one.arrivalFromBelow())), "going up lands beside floor 1's ladder down: " + up);
+        helper.assertTrue(MinesFloors.ascend(player, level, base, 1).isEmpty(), "there's no going up from floor 1");
+        MinesFloorsData.get(level).clear();
+        helper.succeed();
     }
 
     @GameTest(template = EMPTY)

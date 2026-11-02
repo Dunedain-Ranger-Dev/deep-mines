@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "deepmines:block/ladder_up"
+    }
+  }
+}

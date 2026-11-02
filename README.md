@@ -19,6 +19,8 @@ Where the mod is headed: [the design doc](docs/design/deep-mines.md).
 
 - `/deepmines when`: when the Mines reset.
 - `/deepmines reset` (operators): reset the Mines the next time the server starts.
+- `/deepmines floor <number>` (operators): go to a floor of the Mines, building it if no one has been there. Each floor
+  has a ladder down in its farthest cave and a ladder up in its first; right-click one to use it.
 
 ## Requirements
 
