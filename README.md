@@ -12,6 +12,8 @@ A mining dimension for NeoForge 1.21.1 that resets on a schedule, so nobody has 
   back in to reset Mines is sent to their spawn point. Portals elsewhere keep working and make a fresh portal in the
   new Mines.
 
+Where the mod is headed: [the design doc](docs/design/deep-mines.md).
+
 ## Commands
 
 - `/deepmines when`: when the Mines reset.
