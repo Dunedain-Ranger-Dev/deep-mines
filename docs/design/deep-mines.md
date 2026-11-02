@@ -75,7 +75,7 @@ the `deepmines:in_mines` filter).
 
 ## Where it stands
 
-Built in 0.1.0 (MINE-2 to MINE-4), not yet tested in game:
+Built in 0.1.0 (MINE-2 to MINE-4), and tested in game on 2026-11-02:
 
 - The Mines dimension, using vanilla cave terrain. Building the floors with Dungeon Delving replaces that terrain.
 - A deepslate-brick portal that anyone can build anywhere. That conflicts with entry from the Dwarven capital only.
