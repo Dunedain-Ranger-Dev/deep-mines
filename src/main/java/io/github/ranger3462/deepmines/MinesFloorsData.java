@@ -21,18 +21,10 @@ public class MinesFloorsData extends SavedData {
     private static final String NAME = DeepMines.MODID + "_floors";
 
     /**
-     * A built floor: where its ladder up and ladder down stand (the ladder up is absent on floor 1), and where players
-     * arrive, next to each.
+     * A built floor: where its ladder up and ladder down stand, and where players arrive beside each (coming down from
+     * above, or up from below). Floor 0 is the start floor, whose ladder up leads out of the Mines.
      */
-    public record Floor(int number, BlockPos ladderUp, BlockPos ladderDown) {
-        public BlockPos arrivalFromAbove() {
-            return ladderUp.east(2);
-        }
-
-        public BlockPos arrivalFromBelow() {
-            return ladderDown.east(2);
-        }
-    }
+    public record Floor(int number, BlockPos ladderUp, BlockPos ladderDown, BlockPos arrivalFromAbove, BlockPos arrivalFromBelow) {}
 
     private final Map<Integer, Floor> floors = new HashMap<>();
 
@@ -61,8 +53,12 @@ public class MinesFloorsData extends SavedData {
             CompoundTag floor = (CompoundTag) entry;
             Optional<BlockPos> up = NbtUtils.readBlockPos(floor, "ladder_up");
             Optional<BlockPos> down = NbtUtils.readBlockPos(floor, "ladder_down");
-            if (up.isPresent() && down.isPresent()) {
-                data.floors.put(floor.getInt("number"), new Floor(floor.getInt("number"), up.get(), down.get()));
+            Optional<BlockPos> fromAbove = NbtUtils.readBlockPos(floor, "arrival_from_above");
+            Optional<BlockPos> fromBelow = NbtUtils.readBlockPos(floor, "arrival_from_below");
+            // Floors saved before the arrivals were (from 0.1.0's smaller floors) are forgotten, and built again.
+            if (up.isPresent() && down.isPresent() && fromAbove.isPresent() && fromBelow.isPresent()) {
+                int number = floor.getInt("number");
+                data.floors.put(number, new Floor(number, up.get(), down.get(), fromAbove.get(), fromBelow.get()));
             }
         }
         return data;
@@ -76,6 +72,8 @@ public class MinesFloorsData extends SavedData {
             entry.putInt("number", floor.number());
             entry.put("ladder_up", NbtUtils.writeBlockPos(floor.ladderUp()));
             entry.put("ladder_down", NbtUtils.writeBlockPos(floor.ladderDown()));
+            entry.put("arrival_from_above", NbtUtils.writeBlockPos(floor.arrivalFromAbove()));
+            entry.put("arrival_from_below", NbtUtils.writeBlockPos(floor.arrivalFromBelow()));
             list.add(entry);
         });
         tag.put("floors", list);

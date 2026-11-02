@@ -1,12 +1,14 @@
 package io.github.ranger3462.deepmines.gametest;
 
-import static io.github.ranger3462.dungeondelving.dungeon.RoomSpec.*;
+import static io.github.ranger3462.deepmines.MinesSpec.*;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -16,25 +18,28 @@ import com.mojang.serialization.JsonOps;
 
 import io.github.ranger3462.deepmines.DeepMines;
 import io.github.ranger3462.deepmines.InMinesPlacement;
+import io.github.ranger3462.deepmines.MinesBuilder;
+import io.github.ranger3462.deepmines.MinesBuilder.Placement;
 import io.github.ranger3462.deepmines.MinesFloors;
 import io.github.ranger3462.deepmines.MinesFloorsData;
-import io.github.ranger3462.deepmines.ModBlocks;
+import io.github.ranger3462.deepmines.MinesPieces;
+import io.github.ranger3462.deepmines.MinesPieces.Kind;
 import io.github.ranger3462.deepmines.MinesPortal;
 import io.github.ranger3462.deepmines.MinesReset;
-import io.github.ranger3462.dungeondelving.dungeon.DungeonMarkers;
-import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonBuildQueue;
-import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonBuilder;
-import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonBuilder.Placement;
+import io.github.ranger3462.deepmines.ModBlocks;
+import io.github.ranger3462.deepmines.OreTable;
+import io.github.ranger3462.deepmines.OreTable.Ore;
 import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonLayout.Cell;
-import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonPieces;
-import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonPieces.Kind;
-import io.github.ranger3462.dungeondelving.dungeon.layout.PieceValidator;
 import net.kyrptonaught.customportalapi.CustomPortalApiRegistry;
 import net.kyrptonaught.customportalapi.util.PortalLink;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.Vec3i;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -44,15 +49,20 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.placement.PlacedFeature;
 import net.minecraft.world.level.levelgen.placement.PlacementContext;
+import net.minecraft.world.level.levelgen.structure.templatesystem.LiquidSettings;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import net.neoforged.fml.ModList;
+import net.neoforged.neoforge.common.Tags;
 import net.neoforged.neoforge.common.util.FakePlayerFactory;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
-/** Checks the Mines: the dimension's data, the portal, the reset schedule, and building floors. */
+/** Checks the Mines: the dimension's data, the portal, the reset schedule, the pieces, the ore, and building floors. */
 @GameTestHolder(DeepMines.MODID)
 @PrefixGameTestTemplate(false)
 public class MinesTests {
@@ -117,6 +127,7 @@ public class MinesTests {
         helper.assertTrue(link != null && link.dimID.equals(MinesPortal.MINES.location()), "a deepslate brick frame should lead to the Mines");
         helper.assertTrue(link.portalSearchYTop == MinesPortal.ARRIVAL_TOP_Y && link.portalSearchYBottom == MinesPortal.ARRIVAL_BOTTOM_Y,
                 "arrival portals should be placed in caves, not on the roof");
+        helper.assertTrue(MinesFloors.BASE.getY() > MinesPortal.ARRIVAL_TOP_Y, "and below the floors, so they never cut into one");
         helper.succeed();
     }
 
@@ -130,93 +141,285 @@ public class MinesTests {
         helper.succeed();
     }
 
-    /**
-     * A floor is a Dungeon Delving layout built from the Mines' own pieces. The Mines have no boss or challenge rooms,
-     * so those slots get caves. The test server has no Mines dimension, so this builds in the test level.
-     */
-    @GameTest(template = EMPTY, timeoutTicks = 200)
-    public static void floorsBuildFromTheMinesOwnPieces(GameTestHelper helper) {
+    /** A floor's plan: the Mines' own pieces only, its first room common, a corridor per join and a cap per dead end. */
+    @GameTest(template = EMPTY)
+    public static void floorsArePlannedFromTheMinesOwnPieces(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        BlockPos center = helper.absolutePos(BlockPos.ZERO).above(120);
-        List<Placement> placements = MinesFloors.plan(level.getServer(), center, 3, RandomSource.create(1));
+        List<Placement> placements = MinesFloors.plan(level, BlockPos.ZERO, 5, RandomSource.create(1));
         for (Placement placement : placements) {
             helper.assertTrue(placement.template().getNamespace().equals(DeepMines.MODID)
-                    && placement.template().getPath().startsWith(MinesFloors.PIECES + "/"), "every piece should be the Mines' own: " + placement.template());
+                    && placement.template().getPath().startsWith(MinesPieces.FOLDER + "/" + placement.kind().prefix()),
+                    "every piece should be the Mines' own, of its kind: " + placement.template());
         }
-        int region = -1;
-        DungeonBuildQueue.add(level.dimension(), region, placements, DungeonMarkers.Rolls.fromConfig(1));
-        BlockPos first = DungeonBuilder.roomMin(center, Cell.ORIGIN);
-        helper.succeedWhen(() -> {
-            helper.assertTrue(DungeonBuildQueue.pending(level.dimension(), region) == 0, "the queue should finish the floor");
-            helper.assertFalse(level.getBlockState(first).isAir(), "the first cave's floor should be built");
-            helper.assertFalse(level.getBlockState(first.offset(ROOM_SIZE - 1, ROOM_HEIGHT - 1, ROOM_SIZE - 1)).isAir(), "and its far ceiling corner");
-            // Every piece fits in a room-sized box from its corner, whichever way it's turned.
-            for (Placement placement : placements) {
-                BlockPos min = placement.targetMin();
-                for (BlockPos pos : BlockPos.betweenClosed(min, min.offset(ROOM_SIZE - 1, ROOM_HEIGHT - 1, ROOM_SIZE - 1))) {
-                    level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
-                }
-            }
-        });
-    }
-
-    /**
-     * Floors sit side by side and are built when first reached: floor 1 has a ladder down in its farthest cave, floor 2
-     * a ladder up in its first, and the ladders take a player down and back up. Built in the test level, as the test
-     * server has no Mines.
-     */
-    @GameTest(template = EMPTY, timeoutTicks = 200)
-    public static void laddersLinkTheFloors(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        MinesFloorsData.get(level).clear();
-        BlockPos base = helper.absolutePos(BlockPos.ZERO).above(150);
-
-        MinesFloorsData.Floor one = MinesFloors.floor(level, base, 1);
-        helper.assertTrue(level.getBlockState(one.ladderDown()).is(ModBlocks.LADDER_DOWN.get()), "floor 1 has a ladder down");
-        helper.assertFalse(level.getBlockState(one.ladderUp()).is(ModBlocks.LADDER_UP.get()), "but no ladder up");
-        helper.assertTrue(MinesFloorsData.get(level).floor(2).isEmpty(), "floor 2 isn't built until someone goes down");
-
-        ServerPlayer player = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "mines_tester"));
-        Optional<BlockPos> down = MinesFloors.descend(player, level, base, 1);
-        MinesFloorsData.Floor two = MinesFloorsData.get(level).floor(2).orElseThrow();
-        helper.assertTrue(level.getBlockState(two.ladderUp()).is(ModBlocks.LADDER_UP.get()), "floor 2 has a ladder up");
-        helper.assertTrue(level.getBlockState(two.ladderDown()).is(ModBlocks.LADDER_DOWN.get()), "and a ladder down");
-        helper.assertTrue(MinesFloors.floorAt(base, two.ladderDown()) == 2 && MinesFloors.floorAt(base, one.ladderDown()) == 1,
-                "each ladder knows its floor");
-        helper.assertTrue(down.equals(Optional.of(two.arrivalFromAbove())), "going down lands beside floor 2's ladder up: " + down);
-        helper.assertTrue(level.getBlockState(two.arrivalFromAbove()).isAir() && level.getBlockState(two.arrivalFromAbove().above()).isAir(),
-                "with room to stand");
-
-        Optional<BlockPos> up = MinesFloors.ascend(player, level, base, 2);
-        helper.assertTrue(up.equals(Optional.of(one.arrivalFromBelow())), "going up lands beside floor 1's ladder down: " + up);
-        helper.assertTrue(MinesFloors.ascend(player, level, base, 1).isEmpty(), "there's no going up from floor 1");
-        MinesFloorsData.get(level).clear();
+        long rooms = placements.stream().filter(p -> p.kind().room()).count();
+        long tunnels = placements.stream().filter(p -> p.kind() == Kind.TUNNEL).count();
+        long caps = placements.stream().filter(p -> p.kind() == Kind.CAP).count();
+        helper.assertTrue(rooms == 5 && caps == rooms * 4 - tunnels * 2, rooms + " rooms, " + tunnels + " corridors, " + caps + " caps");
+        helper.assertTrue(placements.get(0).kind() == Kind.COMMON, "the first room is common: " + placements.get(0).kind());
+        helper.assertTrue(placements.stream().noneMatch(p -> p.kind() == Kind.START), "the start hall is only on the start floor");
         helper.succeed();
     }
 
     /**
-     * Every one of the Mines' pieces is the right size and passes Dungeon Delving's piece rules (solid floor and
-     * ceiling, open doorways framed by wall, a clear corridor, a solid cap), and each kind the floors use has its own.
+     * The ore table is the design doc's (and {@code ore-table.py}'s): coal and copper up top, no Mithril above floor 6,
+     * and deepslate from about floor 45 down.
      */
-    @GameTest(template = EMPTY, timeoutTicks = 200)
-    public static void minePiecesPassThePieceRules(GameTestHelper helper) {
+    @GameTest(template = EMPTY)
+    public static void theOreTableMatchesTheDesign(GameTestHelper helper) {
+        Map<Ore, Double> one = OreTable.mix(1);
+        helper.assertTrue(Math.abs(one.get(Ore.COAL) - 50) < 1 && Math.abs(one.get(Ore.COPPER) - 40) < 1, "floor 1 is half coal, 40% copper: " + one);
+        helper.assertTrue(OreTable.mix(5).get(Ore.MITHRIL) == 0 && Math.abs(OreTable.mix(6).get(Ore.MITHRIL) - 0.5) < 1e-9, "Mithril starts on floor 6");
+        helper.assertTrue(Math.abs(OreTable.mix(100).get(Ore.MITHRIL) - 2) < 1e-9, "at 2% on floor 100");
+        Map<Ore, Double> seventy = OreTable.mix(70);
+        helper.assertTrue(Math.abs(seventy.get(Ore.DIAMOND) - 29) < 1 && seventy.get(Ore.COAL) < 0.05, "floor 70 is diamond country: " + seventy);
+        for (int floor : new int[] { 1, 30, 70, 100 }) {
+            double total = OreTable.mix(floor).values().stream().mapToDouble(Double::doubleValue).sum();
+            helper.assertTrue(Math.abs(total - 100) < 1e-6, "floor " + floor + " adds up to " + total);
+        }
+        helper.assertTrue(OreTable.deepslateChance(40) == 0 && OreTable.deepslateChance(55) == 1 && OreTable.deepslateChance(MinesFloors.START) == 0,
+                "stone up top, deepslate from floor 50 or so");
+        helper.succeed();
+    }
+
+    /**
+     * Every piece is the right size and keeps the rules a floor relies on. Rooms: solid all round but their doorways,
+     * a landing inside each, water only in flooded rooms, spawners in infested ones, and more ore in quarries than
+     * common rooms. Corridors: solid all round, open at both ends, a clear walkway. Caps: solid, no ore. The start hall:
+     * sealed, with room at its ladders.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = 400)
+    public static void minePiecesFollowTheRules(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        DungeonPieces pieces = MinesFloors.pieces(level.getServer());
+        MinesPieces pieces = MinesFloors.pieces(level);
         helper.assertTrue(pieces.skipped().isEmpty(), "no piece should be skipped: " + pieces.skipped());
-        helper.assertTrue(pieces.pool(Kind.START).stream().allMatch(id -> id.getPath().contains("start_")), "floors start in an arrival cave");
-        helper.assertTrue(pieces.pool(Kind.BOSS).stream().allMatch(id -> id.getPath().contains("boss_")), "and end in a ladder shaft");
-        helper.assertTrue(pieces.pool(Kind.COMMON).size() >= 3, "there are several caves");
+        for (Kind kind : Kind.values()) {
+            helper.assertTrue(pieces.all().containsValue(kind), "there should be " + kind.prefix() + " pieces");
+        }
+        helper.assertTrue(pieces.pool(Kind.COMMON).size() >= 4, "dig-up and dig-down common rooms");
 
         BlockPos corner = helper.absolutePos(BlockPos.ZERO).above(150);
         List<String> problems = new ArrayList<>();
+        Map<Kind, List<Integer>> ore = new EnumMap<>(Kind.class);
         for (var piece : pieces.all().entrySet()) {
-            DungeonBuilder.place(level, new Placement(piece.getKey(), corner, Rotation.NONE, Mirror.NONE), false);
-            PieceValidator.validate(piece.getValue(), level, corner).forEach(problem -> problems.add(piece.getKey() + ": " + problem.describe(corner)));
-            for (BlockPos pos : BlockPos.betweenClosed(corner, corner.offset(ROOM_SIZE - 1, ROOM_HEIGHT - 1, ROOM_SIZE - 1))) {
+            Kind kind = piece.getValue();
+            String name = piece.getKey().getPath();
+            StructureTemplate template = level.getStructureManager().get(piece.getKey()).orElseThrow();
+            ore.computeIfAbsent(kind, k -> new ArrayList<>()).add(template.filterBlocks(BlockPos.ZERO, new StructurePlaceSettings(), ModBlocks.ORE_SPOT.get()).size());
+            template.placeInWorld(level, corner, corner, new StructurePlaceSettings().setLiquidSettings(LiquidSettings.IGNORE_WATERLOGGING), level.getRandom(), Block.UPDATE_CLIENTS);
+            Vec3i size = kind.size();
+            switch (kind) {
+                case COMMON, QUARRY, FLOODED, INFESTED -> checkRoom(level, corner, kind, name, problems);
+                case START -> checkStart(level, corner, name, problems);
+                case TUNNEL -> checkTunnel(level, corner, name, problems);
+                case CAP -> forEach(corner, size, (pos, x, y, z) -> {
+                    if (!solid(level, pos)) {
+                        problems.add(name + ": a hole at " + x + "," + y + "," + z);
+                    }
+                });
+            }
+            for (BlockPos pos : BlockPos.betweenClosed(corner, corner.offset(size.getX() - 1, size.getY() - 1, size.getZ() - 1))) {
                 level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
             }
         }
+        helper.assertTrue(problems.isEmpty(), problems.size() + " problems, first: " + problems.stream().limit(4).toList());
+        double common = ore.get(Kind.COMMON).stream().mapToInt(Integer::intValue).average().orElse(0);
+        double quarry = ore.get(Kind.QUARRY).stream().mapToInt(Integer::intValue).average().orElse(0);
+        helper.assertTrue(common > 300 && quarry > common * 1.5, "quarries should have far more ore than common rooms: " + ore);
+        helper.assertTrue(ore.get(Kind.TUNNEL).stream().allMatch(n -> n > 0 && n < 30), "corridors have a little ore: " + ore.get(Kind.TUNNEL));
+        helper.assertTrue(ore.get(Kind.CAP).stream().allMatch(n -> n == 0) && ore.get(Kind.START).stream().allMatch(n -> n == 0), "caps and the hall have none");
+        helper.succeed();
+    }
+
+    private interface Spot {
+        void at(BlockPos pos, int x, int y, int z);
+    }
+
+    private static void forEach(BlockPos corner, Vec3i size, Spot spot) {
+        for (int x = 0; x < size.getX(); x++) {
+            for (int y = 0; y < size.getY(); y++) {
+                for (int z = 0; z < size.getZ(); z++) {
+                    spot.at(corner.offset(x, y, z), x, y, z);
+                }
+            }
+        }
+    }
+
+    private static boolean solid(ServerLevel level, BlockPos pos) {
+        var state = level.getBlockState(pos);
+        return !state.getCollisionShape(level, pos).isEmpty() && state.getFluidState().isEmpty();
+    }
+
+    private static void checkRoom(ServerLevel level, BlockPos corner, Kind kind, String name, List<String> problems) {
+        int max = ROOM_SIZE - 1;
+        int[] water = { 0 };
+        int[] spawners = { 0 };
+        forEach(corner, kind.size(), (pos, x, y, z) -> {
+            var state = level.getBlockState(pos);
+            if (!state.getFluidState().isEmpty()) {
+                water[0]++;
+            }
+            if (state.is(Blocks.SPAWNER)) {
+                spawners[0]++;
+            }
+            boolean outside = x == 0 || y == 0 || z == 0 || x == max || y == ROOM_HEIGHT - 1 || z == max;
+            if (!outside) {
+                return;
+            }
+            boolean doorway = inDoorHeight(y) && ((inDoorSpan(x) && (z == 0 || z == max)) || (inDoorSpan(z) && (x == 0 || x == max)));
+            if (doorway ? !state.isAir() : !solid(level, pos)) {
+                problems.add(name + (doorway ? ": a blocked doorway at " : ": a hole in the outside at ") + x + "," + y + "," + z);
+            }
+        });
+        for (Direction side : Direction.Plane.HORIZONTAL) {
+            for (int depth = 1; depth <= LANDING_DEPTH; depth++) {
+                for (int across = LANDING_START; across < LANDING_START + LANDING_WIDTH; across++) {
+                    int[] p = fromWall(side, across, depth);
+                    if (!solid(level, corner.offset(p[0], WALK_Y, p[1]))) {
+                        problems.add(name + ": no floor in the " + side + " landing at " + p[0] + "," + p[1]);
+                    }
+                    for (int y = DOOR_BOTTOM_Y; y < DOOR_BOTTOM_Y + DOOR_HEIGHT; y++) {
+                        if (!level.getBlockState(corner.offset(p[0], y, p[1])).isAir()) {
+                            problems.add(name + ": the " + side + " landing is blocked at " + p[0] + "," + y + "," + p[1]);
+                        }
+                    }
+                }
+            }
+        }
+        if ((kind == Kind.FLOODED) != (water[0] > 0) || (kind == Kind.FLOODED && water[0] < 500)) {
+            problems.add(name + ": " + water[0] + " water");
+        }
+        if ((kind == Kind.INFESTED) != (spawners[0] >= 2)) {
+            problems.add(name + ": " + spawners[0] + " spawners");
+        }
+    }
+
+    private static void checkTunnel(ServerLevel level, BlockPos corner, String name, List<String> problems) {
+        int lo = TUNNEL_WALL;
+        int hi = TUNNEL_WIDTH - 1 - TUNNEL_WALL;
+        int roof = TUNNEL_WALL + DOOR_HEIGHT - 1;
+        forEach(corner, Kind.TUNNEL.size(), (pos, x, y, z) -> {
+            boolean passage = x >= lo && x <= hi && y >= TUNNEL_WALL && y <= roof;
+            if (!passage && !solid(level, pos)) {
+                problems.add(name + ": a hole in the rock at " + x + "," + y + "," + z);
+            }
+            if (passage && (z == 0 || z == TUNNEL_LENGTH - 1) && !level.getBlockState(pos).isAir()) {
+                problems.add(name + ": a blocked end at " + x + "," + y + "," + z);
+            }
+            if (x == TUNNEL_WIDTH / 2 && y >= TUNNEL_WALL && y < roof && !level.getBlockState(pos).getCollisionShape(level, pos).isEmpty()) {
+                problems.add(name + ": the walkway is blocked at " + x + "," + y + "," + z);
+            }
+        });
+    }
+
+    private static void checkStart(ServerLevel level, BlockPos corner, String name, List<String> problems) {
+        int max = ROOM_SIZE - 1;
+        forEach(corner, Kind.START.size(), (pos, x, y, z) -> {
+            boolean outside = x == 0 || y == 0 || z == 0 || x == max || y == ROOM_HEIGHT - 1 || z == max;
+            if (outside && !solid(level, pos)) {
+                problems.add(name + ": a hole in the outside at " + x + "," + y + "," + z);
+            }
+        });
+        for (int[] spot : new int[][] { START_LADDER_DOWN, START_LADDER_UP }) {
+            BlockPos pos = corner.offset(spot[0], spot[1], spot[2]);
+            if (!level.getBlockState(pos).isAir() || !level.getBlockState(pos.above()).isAir() || !solid(level, pos.below())) {
+                problems.add(name + ": no room for the ladder at " + spot[0] + "," + spot[1] + "," + spot[2]);
+            }
+        }
+    }
+
+    /**
+     * Placing a piece on a deep floor turns its stone to deepslate (and tuff) and its ore to the deepslate kind, its ore
+     * spots all become ore, and its spawners get undead to spawn.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void deepFloorsAreDeepslateWithTheirOre(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinesPieces pieces = MinesFloors.pieces(level);
+        BlockPos corner = helper.absolutePos(BlockPos.ZERO).above(150);
+        ResourceLocation infested = pieces.pool(Kind.INFESTED).get(0);
+        MinesBuilder.place(level, new Placement(infested, Kind.INFESTED, corner, Rotation.CLOCKWISE_90, Mirror.NONE), 100, RandomSource.create(3));
+        int[] counts = new int[4]; // stone, deepslate, ores, spawners with undead
+        List<String> problems = new ArrayList<>();
+        forEach(corner, Kind.INFESTED.size(), (pos, x, y, z) -> {
+            var state = level.getBlockState(pos);
+            if (state.is(Blocks.STONE) || state.is(Blocks.ANDESITE) || state.is(Blocks.DIORITE) || state.is(Blocks.GRANITE)) {
+                counts[0]++;
+            } else if (state.is(Blocks.DEEPSLATE) || state.is(Blocks.TUFF)) {
+                counts[1]++;
+            } else if (state.is(ModBlocks.ORE_SPOT.get())) {
+                problems.add("an ore spot left at " + x + "," + y + "," + z);
+            } else if (state.is(Tags.Blocks.ORES)) {
+                counts[2]++;
+                if (!BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath().startsWith("deepslate_")) {
+                    problems.add("stone ore on floor 100: " + state);
+                }
+            } else if (state.is(Blocks.SPAWNER) && level.getBlockEntity(pos) instanceof SpawnerBlockEntity spawner) {
+                String mob = spawner.getSpawner().save(new CompoundTag()).getCompound("SpawnData").getCompound("entity").getString("id");
+                if (mob.equals("minecraft:zombie") || mob.equals("minecraft:skeleton")) {
+                    counts[3]++;
+                } else {
+                    problems.add("a spawner of '" + mob + "'");
+                }
+            }
+        });
+        for (BlockPos pos : BlockPos.betweenClosed(corner, corner.offset(ROOM_SIZE - 1, ROOM_HEIGHT - 1, ROOM_SIZE - 1))) {
+            level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+        }
         helper.assertTrue(problems.isEmpty(), problems.size() + " problems, first: " + problems.stream().limit(3).toList());
+        helper.assertTrue(counts[0] == 0 && counts[1] > 10000, "floor 100 is deepslate and tuff: " + counts[0] + " stone, " + counts[1] + " deepslate");
+        helper.assertTrue(counts[2] > 300 && counts[3] >= 2, counts[2] + " ore, " + counts[3] + " spawners of undead");
+        helper.succeed();
+    }
+
+    /**
+     * The start floor and the floors below it are built when first reached, with the start hall's ladder down leading to
+     * floor 1, each floor's ladder down to the next, and ladders up back again; from the start floor, up leads out.
+     * Built in the test level, as the test server has no Mines.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = 400)
+    public static void laddersLinkTheFloors(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinesFloorsData.get(level).clear();
+        BlockPos base = helper.absolutePos(BlockPos.ZERO).above(120);
+
+        MinesFloorsData.Floor start = MinesFloors.floor(level, base, MinesFloors.START);
+        helper.assertTrue(level.getBlockState(start.ladderDown()).is(ModBlocks.LADDER_DOWN.get()), "the start hall has a ladder down");
+        helper.assertTrue(level.getBlockState(start.ladderUp()).is(ModBlocks.LADDER_UP.get()), "and a ladder up and out");
+        helper.assertTrue(MinesFloors.floorAt(base, start.ladderDown()) == MinesFloors.START, "it's on the start floor");
+        helper.assertTrue(MinesFloorsData.get(level).floor(1).isEmpty(), "floor 1 isn't built until someone goes down");
+
+        ServerPlayer player = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "mines_tester"));
+        Optional<BlockPos> toOne = MinesFloors.descend(player, level, base, MinesFloors.START);
+        MinesFloorsData.Floor one = MinesFloorsData.get(level).floor(1).orElseThrow();
+        helper.assertTrue(toOne.equals(Optional.of(one.arrivalFromAbove())), "going down lands beside floor 1's ladder up: " + toOne);
+        Optional<BlockPos> toTwo = MinesFloors.descend(player, level, base, 1);
+        MinesFloorsData.Floor two = MinesFloorsData.get(level).floor(2).orElseThrow();
+        helper.assertTrue(toTwo.equals(Optional.of(two.arrivalFromAbove())), "and on to floor 2: " + toTwo);
+        for (MinesFloorsData.Floor floor : List.of(start, one, two)) {
+            helper.assertTrue(level.getBlockState(floor.ladderUp()).is(ModBlocks.LADDER_UP.get()), "floor " + floor.number() + " has a ladder up");
+            helper.assertTrue(level.getBlockState(floor.ladderDown()).is(ModBlocks.LADDER_DOWN.get()), "and a ladder down");
+            helper.assertTrue(MinesFloors.floorAt(base, floor.ladderDown()) == floor.number(), "which knows its floor");
+            for (BlockPos arrival : List.of(floor.arrivalFromAbove(), floor.arrivalFromBelow())) {
+                helper.assertTrue(level.getBlockState(arrival).isAir() && level.getBlockState(arrival.above()).isAir() && solid(level, arrival.below()),
+                        "with room to stand on floor " + floor.number() + " at " + arrival);
+            }
+        }
+        // The first room's ore spots have all become ore.
+        BlockPos first = MinesBuilder.roomMin(MinesFloors.center(base, 1), Cell.ORIGIN);
+        int[] ore = { 0, 0 };
+        forEach(first, Kind.COMMON.size(), (pos, x, y, z) -> {
+            var state = level.getBlockState(pos);
+            ore[0] += state.is(Tags.Blocks.ORES) ? 1 : 0;
+            ore[1] += state.is(ModBlocks.ORE_SPOT.get()) ? 1 : 0;
+        });
+        helper.assertTrue(ore[0] > 300 && ore[1] == 0, "floor 1's first room has " + ore[0] + " ore and " + ore[1] + " spots left");
+
+        Optional<BlockPos> up = MinesFloors.ascend(player, level, base, 2);
+        helper.assertTrue(up.equals(Optional.of(one.arrivalFromBelow())), "going up lands beside floor 1's ladder down: " + up);
+        Optional<BlockPos> toStart = MinesFloors.ascend(player, level, base, 1);
+        helper.assertTrue(toStart.equals(Optional.of(start.arrivalFromBelow())), "and from floor 1 up to the start hall: " + toStart);
+        helper.assertTrue(MinesFloors.ascend(player, level, base, MinesFloors.START).isEmpty(), "up from the start floor leads out of the Mines");
+        MinesFloorsData.get(level).clear();
         helper.succeed();
     }
 

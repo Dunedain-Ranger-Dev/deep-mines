@@ -14,9 +14,9 @@ import net.minecraft.world.level.material.MapColor;
 import net.minecraft.world.phys.BlockHitResult;
 
 /**
- * The ladders between the Mines' floors: the ladder down sits in a floor's farthest cave, the ladder up in its first.
- * Using one takes the player to the next floor (building it if no one has been there yet) or back to the one above.
- * They can't be broken.
+ * The ladders between the Mines' floors: the ladder down sits in a floor's farthest room, the ladder up in its first.
+ * Using one takes the player to the next floor (building it if no one has been there yet) or back to the one above;
+ * the start floor's ladder up leads out of the Mines. They can't be broken.
  */
 public class MineLadderBlock extends Block {
     private final boolean down;
