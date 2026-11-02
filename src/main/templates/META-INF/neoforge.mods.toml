@@ -36,7 +36,7 @@ deepslate bricks, light it, and dig to your heart's content.
 # Dungeon Delving's layout generator and builder build the Mines' floors.
 [[dependencies.${mod_id}]]
     modId="dungeondelving"
-    type="required"
+    type="${dd_dependency_type}"
     versionRange="*"
     ordering="AFTER"
     side="BOTH"
