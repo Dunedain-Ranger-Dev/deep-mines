@@ -5,6 +5,7 @@ import static io.github.ranger3462.dungeondelving.dungeon.RoomSpec.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -25,6 +26,9 @@ import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonBuildQueue;
 import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonBuilder;
 import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonBuilder.Placement;
 import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonLayout.Cell;
+import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonPieces;
+import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonPieces.Kind;
+import io.github.ranger3462.dungeondelving.dungeon.layout.PieceValidator;
 import net.kyrptonaught.customportalapi.CustomPortalApiRegistry;
 import net.kyrptonaught.customportalapi.util.PortalLink;
 import net.minecraft.core.BlockPos;
@@ -38,6 +42,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.Mirror;
+import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.placement.PlacedFeature;
 import net.minecraft.world.level.levelgen.placement.PlacementContext;
@@ -185,6 +191,32 @@ public class MinesTests {
         helper.assertTrue(up.equals(Optional.of(one.arrivalFromBelow())), "going up lands beside floor 1's ladder down: " + up);
         helper.assertTrue(MinesFloors.ascend(player, level, base, 1).isEmpty(), "there's no going up from floor 1");
         MinesFloorsData.get(level).clear();
+        helper.succeed();
+    }
+
+    /**
+     * Every one of the Mines' pieces is the right size and passes Dungeon Delving's piece rules (solid floor and
+     * ceiling, open doorways framed by wall, a clear corridor, a solid cap), and each kind the floors use has its own.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void minePiecesPassThePieceRules(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        DungeonPieces pieces = MinesFloors.pieces(level.getServer());
+        helper.assertTrue(pieces.skipped().isEmpty(), "no piece should be skipped: " + pieces.skipped());
+        helper.assertTrue(pieces.pool(Kind.START).stream().allMatch(id -> id.getPath().contains("start_")), "floors start in an arrival cave");
+        helper.assertTrue(pieces.pool(Kind.BOSS).stream().allMatch(id -> id.getPath().contains("boss_")), "and end in a ladder shaft");
+        helper.assertTrue(pieces.pool(Kind.COMMON).size() >= 3, "there are several caves");
+
+        BlockPos corner = helper.absolutePos(BlockPos.ZERO).above(150);
+        List<String> problems = new ArrayList<>();
+        for (var piece : pieces.all().entrySet()) {
+            DungeonBuilder.place(level, new Placement(piece.getKey(), corner, Rotation.NONE, Mirror.NONE), false);
+            PieceValidator.validate(piece.getValue(), level, corner).forEach(problem -> problems.add(piece.getKey() + ": " + problem.describe(corner)));
+            for (BlockPos pos : BlockPos.betweenClosed(corner, corner.offset(ROOM_SIZE - 1, ROOM_HEIGHT - 1, ROOM_SIZE - 1))) {
+                level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+            }
+        }
+        helper.assertTrue(problems.isEmpty(), problems.size() + " problems, first: " + problems.stream().limit(3).toList());
         helper.succeed();
     }
 

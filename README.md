@@ -33,4 +33,5 @@ To build, check out dungeon-delving next to this repository; Gradle builds it fr
 
 ## Building
 
-`./gradlew build` (Java 21). `./gradlew runClient` to play, `./gradlew runGameTestServer` for the tests.
+`./gradlew build` (Java 21). `./gradlew runClient` to play, `./gradlew runGameTestServer` for the tests, and
+`./gradlew runData` to regenerate the Mines' pieces (`src/generated/resources/`, committed).
