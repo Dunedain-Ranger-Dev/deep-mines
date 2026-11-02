@@ -69,6 +69,17 @@ public class MinesTests {
     }
 
     /**
+     * The Mines' terrain is vanilla's caves with aquifers turned on: YUNG's Better Caves (in the pack) crashes chunk
+     * generation in any dimension without them, which broke the portal in the pack.
+     */
+    @GameTest(template = EMPTY)
+    public static void theMinesTerrainHasAquifers(GameTestHelper helper) {
+        var settings = helper.getLevel().registryAccess().registryOrThrow(Registries.NOISE_SETTINGS).get(DeepMines.id("mines"));
+        helper.assertTrue(settings != null && settings.aquifersEnabled(), "the Mines' noise settings should have aquifers on");
+        helper.succeed();
+    }
+
+    /**
      * The {@code deepmines:in_mines} filter keeps a feature out of every other dimension; with the pack, Ice and Fire's
      * silver and sapphire carry it, so they only generate in the Mines.
      */
