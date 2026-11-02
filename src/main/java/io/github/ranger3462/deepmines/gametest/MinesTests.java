@@ -3,20 +3,28 @@ package io.github.ranger3462.deepmines.gametest;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Optional;
 
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 
 import io.github.ranger3462.deepmines.DeepMines;
+import io.github.ranger3462.deepmines.InMinesPlacement;
 import io.github.ranger3462.deepmines.MinesPortal;
 import io.github.ranger3462.deepmines.MinesReset;
 import net.kyrptonaught.customportalapi.CustomPortalApiRegistry;
 import net.kyrptonaught.customportalapi.util.PortalLink;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.RegistryOps;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.levelgen.placement.PlacedFeature;
+import net.minecraft.world.level.levelgen.placement.PlacementContext;
+import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -44,6 +52,26 @@ public class MinesTests {
             helper.assertTrue(result.isSuccess(), "the Mines dimension should decode: " + result.error().map(Object::toString).orElse(""));
         } catch (IOException e) {
             helper.fail("couldn't read the Mines dimension: " + e);
+        }
+        helper.succeed();
+    }
+
+    /**
+     * The {@code deepmines:in_mines} filter keeps a feature out of every other dimension; with the pack, Ice and Fire's
+     * silver and sapphire carry it, so they only generate in the Mines.
+     */
+    @GameTest(template = EMPTY)
+    public static void inMinesOresStayOutOfTheOverworld(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var context = new PlacementContext(level, level.getChunkSource().getGenerator(), Optional.empty());
+        helper.assertTrue(InMinesPlacement.INSTANCE.getPositions(context, level.getRandom(), BlockPos.ZERO).findAny().isEmpty(),
+                "nothing filtered to the Mines places in the overworld");
+        var placed = level.registryAccess().registryOrThrow(Registries.PLACED_FEATURE);
+        for (String ore : List.of("silver_ore", "sapphire_ore")) {
+            PlacedFeature feature = placed.get(ResourceLocation.fromNamespaceAndPath("iceandfire", ore));
+            if (feature != null && ModList.get().isLoaded("kubejs")) { // The pack's data adds the filter.
+                helper.assertTrue(feature.placement().contains(InMinesPlacement.INSTANCE), "Ice and Fire's " + ore + " only generates in the Mines");
+            }
         }
         helper.succeed();
     }
