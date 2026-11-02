@@ -1,63 +1,57 @@
 package io.github.ranger3462.deepmines;
 
-import static io.github.ranger3462.dungeondelving.dungeon.RoomSpec.*;
+import static io.github.ranger3462.deepmines.MinesSpec.*;
 
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import io.github.ranger3462.deepmines.MinesBuilder.Placement;
 import io.github.ranger3462.deepmines.MinesFloorsData.Floor;
-import io.github.ranger3462.dungeondelving.dungeon.DungeonMarkers;
-import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonBuildQueue;
-import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonBuilder;
-import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonBuilder.Placement;
+import io.github.ranger3462.deepmines.MinesPieces.Kind;
 import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonLayout;
 import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonLayout.Cell;
-import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonLayout.RoomKind;
 import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonLayoutGenerator;
-import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonPieces;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.Mirror;
+import net.minecraft.world.level.block.Rotation;
 
 /**
- * Builds the Mines' floors with Dungeon Delving's layout generator and builder, from Deep Mines' own pieces in
- * {@code data/deepmines/structure/mines/} (caves are {@code common_}, corridors {@code tunnel_}, plugs {@code cap_}).
+ * Builds the Mines' floors: Dungeon Delving's layout generator decides where a floor's rooms go and which are joined,
+ * and {@link MinesBuilder} fills them with the Mines' own pieces.
  * <p>
- * Floors sit side by side, each in its own {@link #FLOOR_SPACING}-block stretch east of the last, and are built the
- * first time someone reaches them. A floor's first cave has the ladder up (except on floor 1) and its farthest cave
- * the ladder down to the next floor.
+ * Floor 0 is the start floor, the same for every Mines: one hall, where players come in, with a ladder up out of the
+ * Mines and a ladder down to floor 1. Below it, floors sit side by side, each in its own {@link #FLOOR_SPACING}-block
+ * stretch east of the last, and are built the first time someone reaches them. A floor's first room has the ladder up
+ * and its farthest room the ladder down, each on the landing inside a doorway.
  */
 public final class MinesFloors {
-    /** The folder the Mines' pieces live in, inside {@code data/deepmines/structure/}. */
-    public static final String PIECES = "mines";
-    /** How far apart floors are, east to west. A layout stays well inside half of this. */
+    /** The start floor, where the portal leads. */
+    public static final int START = 0;
+    /** How far apart floors are, east to west. A floor's rooms stay inside half of this either side of its first. */
     public static final int FLOOR_SPACING = 1024;
-    /** Where floor 1's first cave is centered in the Mines; floor n is {@code (n - 1) * FLOOR_SPACING} east of it. */
-    public static final BlockPos BASE = new BlockPos(0, 0, 0);
+    /**
+     * Where floor 1's first room is centered (at the bottom of the room); floor n is {@code (n - 1) * FLOOR_SPACING}
+     * east of it. High enough to stay clear of the portals Custom Portal API makes in the caves below (up to Y 40).
+     */
+    public static final BlockPos BASE = new BlockPos(0, 60, 0);
 
     private MinesFloors() {}
 
-    public static DungeonPieces pieces(MinecraftServer server) {
-        return DungeonPieces.load(server, DeepMines.MODID, PIECES);
+    public static MinesPieces pieces(ServerLevel level) {
+        return MinesPieces.load(level.getServer());
     }
 
-    /** Where every piece of a floor of {@code caves} caves goes, with its first cave centered on {@code center}. */
-    public static List<Placement> plan(MinecraftServer server, BlockPos center, int caves, RandomSource random) {
-        return DungeonBuilder.plan(DungeonLayoutGenerator.generate(random, caves), pieces(server), center, random);
-    }
-
-    /** Queues a floor to be built a few pieces per tick in {@code level}, as part of {@code region}. */
-    public static void build(ServerLevel level, int region, BlockPos center, int caves, RandomSource random) {
-        DungeonBuildQueue.add(level.dimension(), region, plan(level.getServer(), center, caves, random), DungeonMarkers.Rolls.fromConfig(1));
-    }
-
-    /** The center of a floor's first cave. */
+    /** The center of a floor's first room (or the start floor's hall), at the bottom of the room. */
     public static BlockPos center(BlockPos base, int floor) {
         return base.east((floor - 1) * FLOOR_SPACING);
     }
@@ -74,50 +68,108 @@ public final class MinesFloors {
         if (built.isPresent()) {
             return built.get();
         }
-        Floor floor = buildFloor(level, center(base, number), number, Config.CAVES_PER_FLOOR.get(), RandomSource.create(level.getRandom().nextLong()));
+        RandomSource random = RandomSource.create(level.getRandom().nextLong());
+        long started = System.nanoTime();
+        Floor floor = number == START ? buildStart(level, center(base, START), random)
+                : buildFloor(level, center(base, number), number, Config.CAVES_PER_FLOOR.get(), random);
+        DeepMines.LOGGER.info("Built floor {} of the Mines in {} ms", number, (System.nanoTime() - started) / 1_000_000);
         data.put(floor);
         return floor;
     }
 
+    /** What each room of a layout is: the first is common, the rest as the config's weights say. */
+    public static Map<Cell, Kind> kinds(DungeonLayout layout, RandomSource random) {
+        Map<Kind, Integer> weights = new LinkedHashMap<>();
+        weights.put(Kind.COMMON, Config.COMMON_ROOMS.get());
+        weights.put(Kind.QUARRY, Config.QUARRY_ROOMS.get());
+        weights.put(Kind.FLOODED, Config.FLOODED_ROOMS.get());
+        weights.put(Kind.INFESTED, Config.INFESTED_ROOMS.get());
+        int total = weights.values().stream().mapToInt(Integer::intValue).sum();
+
+        Map<Cell, Kind> kinds = new LinkedHashMap<>();
+        for (Cell cell : layout.rooms().keySet().stream().sorted(Comparator.comparingInt(Cell::x).thenComparingInt(Cell::z)).toList()) {
+            Kind kind = Kind.COMMON;
+            if (!cell.equals(Cell.ORIGIN) && total > 0) {
+                int roll = random.nextInt(total);
+                for (var entry : weights.entrySet()) {
+                    roll -= entry.getValue();
+                    if (roll < 0) {
+                        kind = entry.getKey();
+                        break;
+                    }
+                }
+            }
+            kinds.put(cell, kind);
+        }
+        return kinds;
+    }
+
+    /** Every piece of a floor of {@code rooms} rooms, with its first room centered on {@code center}. */
+    public static List<Placement> plan(ServerLevel level, BlockPos center, int rooms, RandomSource random) {
+        DungeonLayout layout = DungeonLayoutGenerator.generate(random, rooms);
+        return MinesBuilder.plan(layout, kinds(layout, random), pieces(level), center, random);
+    }
+
     /**
-     * Builds a floor all at once (a few rooms, so a short pause the first time anyone reaches it), then its ladders: up
-     * in the first cave, down in the farthest. On the first floor there is no ladder up; players arrive where it would be.
+     * Builds a floor all at once (a short pause the first time anyone reaches it), then its ladders: up in the first
+     * room, down in the farthest.
      */
-    static Floor buildFloor(ServerLevel level, BlockPos center, int number, int caves, RandomSource random) {
-        DungeonLayout layout = DungeonLayoutGenerator.generate(random, caves);
-        DungeonMarkers.Rolls rolls = DungeonMarkers.Rolls.fromConfig(1);
-        DungeonBuilder.plan(layout, pieces(level.getServer()), center, random).forEach(placement -> DungeonBuilder.place(level, placement, rolls));
+    static Floor buildFloor(ServerLevel level, BlockPos center, int number, int rooms, RandomSource random) {
+        DungeonLayout layout = DungeonLayoutGenerator.generate(random, rooms);
+        MinesBuilder.plan(layout, kinds(layout, random), pieces(level), center, random)
+                .forEach(placement -> MinesBuilder.place(level, placement, number, random));
 
-        // The generator makes its farthest room the "boss" room: here, the cave with the way down.
-        Cell farthest = layout.rooms().values().stream().filter(room -> room.kind() == RoomKind.BOSS).findFirst()
-                .map(DungeonLayout.Room::cell)
-                .orElseGet(() -> layout.distancesFromStart().entrySet().stream().max(Map.Entry.comparingByValue()).orElseThrow().getKey());
-        BlockPos up = caveFloorMiddle(center, Cell.ORIGIN);
-        BlockPos down = caveFloorMiddle(center, farthest);
-        if (number > 1) {
-            placeLadder(level, up, ModBlocks.LADDER_UP.get());
-        } else {
-            clearAround(level, up);
-        }
+        Cell farthest = layout.distancesFromStart().entrySet().stream()
+                .max(Map.Entry.<Cell, Integer>comparingByValue().thenComparing(Map.Entry::getKey, Comparator.comparingInt(Cell::x).thenComparingInt(Cell::z)))
+                .orElseThrow().getKey();
+        BlockPos[] up = ladderSpot(layout, center, Cell.ORIGIN);
+        BlockPos[] down = ladderSpot(layout, center, farthest);
+        placeLadder(level, up, ModBlocks.LADDER_UP.get());
         placeLadder(level, down, ModBlocks.LADDER_DOWN.get());
-        return new Floor(number, up, down);
+        return new Floor(number, up[0], down[0], up[1], down[1]);
     }
 
-    /** The block just above the middle of a cave's floor. */
-    private static BlockPos caveFloorMiddle(BlockPos center, Cell cell) {
-        return DungeonBuilder.roomMin(center, cell).offset(ROOM_SIZE / 2, 1, ROOM_SIZE / 2);
+    /** Builds the start floor: its hall, unturned, with a cap in every doorway, and its two ladders. */
+    static Floor buildStart(ServerLevel level, BlockPos center, RandomSource random) {
+        MinesPieces pieces = pieces(level);
+        BlockPos min = MinesBuilder.roomMin(center, Cell.ORIGIN);
+        MinesBuilder.place(level, new Placement(pieces.pick(Kind.START, random), Kind.START, min, Rotation.NONE, Mirror.NONE), START, random);
+        BlockPos down = min.offset(START_LADDER_DOWN[0], START_LADDER_DOWN[1], START_LADDER_DOWN[2]);
+        BlockPos up = min.offset(START_LADDER_UP[0], START_LADDER_UP[1], START_LADDER_UP[2]);
+        // Arrive just inside the hall from each ladder.
+        BlockPos[] downSpot = { down, down.south(2) };
+        BlockPos[] upSpot = { up, up.north(2) };
+        placeLadder(level, downSpot, ModBlocks.LADDER_DOWN.get());
+        placeLadder(level, upSpot, ModBlocks.LADDER_UP.get());
+        return new Floor(START, up, down, upSpot[1], downSpot[1]);
     }
 
-    private static void placeLadder(ServerLevel level, BlockPos pos, Block ladder) {
-        clearAround(level, pos);
-        level.setBlock(pos, ladder.defaultBlockState(), Block.UPDATE_CLIENTS);
-    }
-
-    /** Clears room for a ladder and a player to stand beside it, whatever the cave piece has there. */
-    private static void clearAround(ServerLevel level, BlockPos pos) {
-        for (BlockPos clear : BlockPos.betweenClosed(pos.offset(-1, 0, -1), pos.offset(3, 2, 1))) {
-            level.setBlock(clear, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+    /**
+     * Where a room's ladder goes, and where players arrive beside it: on the landing inside one of its doorways,
+     * beside the way in. A doorway with no corridor (a dead end) is picked first.
+     */
+    private static BlockPos[] ladderSpot(DungeonLayout layout, BlockPos center, Cell cell) {
+        Direction side = null;
+        for (Direction direction : new Direction[] { Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST }) {
+            if (!layout.connected(cell, direction)) {
+                side = direction;
+                break;
+            }
         }
+        if (side == null) {
+            side = Direction.NORTH;
+        }
+        BlockPos min = MinesBuilder.roomMin(center, cell);
+        int[] ladder = fromWall(side, LANDING_START + 1, 2);
+        int[] arrival = fromWall(side, DOOR_START, 2);
+        return new BlockPos[] { min.offset(ladder[0], WALK_Y + 1, ladder[1]), min.offset(arrival[0], WALK_Y + 1, arrival[1]) };
+    }
+
+    /** Places a ladder, and makes sure there's room to stand where players arrive beside it. */
+    private static void placeLadder(ServerLevel level, BlockPos[] spot, Block ladder) {
+        level.setBlock(spot[0], ladder.defaultBlockState(), Block.UPDATE_CLIENTS);
+        level.setBlock(spot[1], Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+        level.setBlock(spot[1].above(), Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
     }
 
     /** Takes a player down from {@code floor} to the next, building it if needed. Returns where they were sent, if anywhere. */
@@ -129,22 +181,27 @@ public final class MinesFloors {
         return Optional.of(arrive(player, level, floor(level, base, floor + 1).arrivalFromAbove(), floor + 1));
     }
 
-    /** Takes a player up from {@code floor} to the one above, arriving by its ladder down. Returns where they were sent, if anywhere. */
+    /**
+     * Takes a player up from {@code floor} to the one above, arriving by its ladder down; from the start floor, out of
+     * the Mines. Returns where in the Mines they were sent, if anywhere.
+     */
     public static Optional<BlockPos> ascend(ServerPlayer player, ServerLevel level, BlockPos base, int floor) {
-        if (floor <= 1) {
+        if (floor <= START) {
+            MinesEntrance.leave(player);
             return Optional.empty();
         }
         return Optional.of(arrive(player, level, floor(level, base, floor - 1).arrivalFromBelow(), floor - 1));
     }
 
-    /** Sends a player to a floor's first cave (for operators, and until the portal leads to floor 1). */
-    public static void visit(ServerPlayer player, ServerLevel level, BlockPos base, int floor) {
-        arrive(player, level, floor(level, base, floor).arrivalFromAbove(), floor);
+    /** Sends a player to a floor, by its ladder up (on the start floor, where the portal brings them in). */
+    public static BlockPos visit(ServerPlayer player, ServerLevel level, BlockPos base, int floor) {
+        return arrive(player, level, floor(level, base, floor).arrivalFromAbove(), floor);
     }
 
     private static BlockPos arrive(ServerPlayer player, ServerLevel level, BlockPos pos, int floor) {
-        player.teleportTo(level, pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, player.getYRot(), player.getXRot());
-        player.displayClientMessage(Component.translatable("message.deepmines.floor", floor), true);
+        MinesEntrance.teleportWithin(player, level, pos);
+        player.displayClientMessage(floor == START ? Component.translatable("message.deepmines.start_floor")
+                : Component.translatable("message.deepmines.floor", floor), true);
         return pos;
     }
 }

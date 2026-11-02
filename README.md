@@ -3,11 +3,14 @@
 A mining dimension for NeoForge 1.21.1 that resets on a schedule, so nobody has to strip-mine the overworld.
 
 - **Getting there:** build a nether-style portal frame out of **deepslate bricks** and light it with flint and steel.
-  Players can build their own, or admins can build one somewhere public. The first trip makes a linked portal in a
-  cave in the Mines; the same portal leads back.
-- **The Mines:** cave terrain all the way down (vanilla's caves world type with overworld biomes, plus its
-  water and lava pockets, which YUNG's Better Caves needs), no sky, a bedrock
-  roof, and monsters in the dark.
+  Players can build their own, or admins can build one somewhere public. It leads to the Mines' entrance hall, whose
+  ladder up takes you back out where you came in.
+- **The Mines:** 100 floors below the entrance hall, each a few big rooms of rock joined by low timbered mineshafts,
+  with a ladder down in the farthest room. The deeper the floor, the better its ore, and deepslate from about floor 50.
+  Rooms are common (the usual amount of ore, to dig down or up into), quarries (packed with ore), flooded (a deep pool
+  to dive into) or infested (spawners). Floors are built the first time someone reaches them. Around the floors is
+  cave terrain (vanilla's caves world type with overworld biomes, plus its water and lava pockets, which YUNG's
+  Better Caves needs), until the floors replace it.
 - **Resets:** once `resetDays` days (default 7, in `config/deepmines-common.toml`) have passed, the Mines are wiped
   the next time the server starts. Players are warned when they arrive and every 5 minutes after, and anyone who logs
   back in to reset Mines is sent to their spawn point. Portals elsewhere keep working and make a fresh portal in the
@@ -19,8 +22,9 @@ Where the mod is headed: [the design doc](docs/design/deep-mines.md).
 
 - `/deepmines when`: when the Mines reset.
 - `/deepmines reset` (operators): reset the Mines the next time the server starts.
-- `/deepmines floor <number>` (operators): go to a floor of the Mines, building it if no one has been there. Each floor
-  has a ladder down in its farthest cave and a ladder up in its first; right-click one to use it.
+- `/deepmines floor <number>` (operators): go to a floor of the Mines, building it if no one has been there; 0 is the
+  entrance hall. Each floor has a ladder down in its farthest room and a ladder up in its first; right-click one to
+  use it.
 
 ## Requirements
 

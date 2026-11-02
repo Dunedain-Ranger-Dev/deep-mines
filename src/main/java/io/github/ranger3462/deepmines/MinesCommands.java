@@ -12,7 +12,7 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 /**
  * {@code /deepmines when} shows anyone when the Mines reset. Operators also get {@code /deepmines reset}, which makes a
  * reset happen the next time the server starts, and {@code /deepmines floor <number>}, which goes to a floor of the
- * Mines (building it if no one has been there yet).
+ * Mines (building it if no one has been there yet); floor 0 is the start floor.
  */
 @EventBusSubscriber(modid = DeepMines.MODID)
 public final class MinesCommands {
@@ -34,7 +34,7 @@ public final class MinesCommands {
                         }))
                 .then(Commands.literal("floor")
                         .requires(source -> source.hasPermission(Commands.LEVEL_GAMEMASTERS))
-                        .then(Commands.argument("number", IntegerArgumentType.integer(1)).executes(context -> {
+                        .then(Commands.argument("number", IntegerArgumentType.integer(MinesFloors.START)).executes(context -> {
                             int floor = IntegerArgumentType.getInteger(context, "number");
                             ServerLevel mines = context.getSource().getServer().getLevel(MinesPortal.MINES);
                             if (mines == null || floor > Config.FLOORS.get()) {

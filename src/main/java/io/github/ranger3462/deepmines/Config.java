@@ -16,8 +16,33 @@ public final class Config {
             .defineInRange("floors", 100, 1, 1000);
 
     public static final ModConfigSpec.IntValue CAVES_PER_FLOOR = BUILDER
-            .comment("How many caves each floor has, joined by corridors. The first has the ladder up, the farthest the ladder down.")
+            .comment("How many rooms each floor has, joined by corridors. The first has the ladder up, the farthest the ladder down.")
             .defineInRange("cavesPerFloor", 3, 2, 20);
+
+    static {
+        BUILDER.comment("How often each kind of room comes up on a floor, as weights (the first room is always common).")
+                .push("rooms");
+    }
+
+    public static final ModConfigSpec.IntValue COMMON_ROOMS = BUILDER
+            .comment("Rooms with the usual amount of ore.")
+            .defineInRange("common", 50, 0, 1000);
+
+    public static final ModConfigSpec.IntValue QUARRY_ROOMS = BUILDER
+            .comment("Quarries, packed with ore.")
+            .defineInRange("quarry", 15, 0, 1000);
+
+    public static final ModConfigSpec.IntValue FLOODED_ROOMS = BUILDER
+            .comment("Flooded rooms: a deep pool to dive into, with ore around it.")
+            .defineInRange("flooded", 15, 0, 1000);
+
+    public static final ModConfigSpec.IntValue INFESTED_ROOMS = BUILDER
+            .comment("Infested rooms, held by mobs from spawners.")
+            .defineInRange("infested", 20, 0, 1000);
+
+    static {
+        BUILDER.pop();
+    }
 
     static final ModConfigSpec SPEC = BUILDER.build();
 
