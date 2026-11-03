@@ -27,7 +27,7 @@ import net.minecraft.world.level.block.Rotation;
 
 /**
  * Builds the Mines' floors: Dungeon Delving's layout generator decides where a floor's rooms go and which are joined,
- * and {@link MinesBuilder} fills them with the Mines' own pieces.
+ * and {@link MinesBuilder} fills them with rooms and corridors carved fresh for the floor.
  * <p>
  * Floor 0 is the start floor, the same for every Mines: one hall, where players come in, with a ladder up out of the
  * Mines and a ladder down to floor 1. Below it, floors sit side by side, each in its own {@link #FLOOR_SPACING}-block
@@ -133,7 +133,7 @@ public final class MinesFloors {
     static Floor buildStart(ServerLevel level, BlockPos center, RandomSource random) {
         MinesPieces pieces = pieces(level);
         BlockPos min = MinesBuilder.roomMin(center, Cell.ORIGIN);
-        MinesBuilder.place(level, new Placement(pieces.pick(Kind.START, random), Kind.START, min, Rotation.NONE, Mirror.NONE), START, random);
+        MinesBuilder.place(level, Placement.saved(pieces.pick(Kind.START, random), Kind.START, min, Rotation.NONE, Mirror.NONE), START, random);
         BlockPos down = min.offset(START_LADDER_DOWN[0], START_LADDER_DOWN[1], START_LADDER_DOWN[2]);
         BlockPos up = min.offset(START_LADDER_UP[0], START_LADDER_UP[1], START_LADDER_UP[2]);
         // Arrive just inside the hall from each ladder.

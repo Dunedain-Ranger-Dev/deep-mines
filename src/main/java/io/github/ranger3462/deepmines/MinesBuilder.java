@@ -11,6 +11,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import javax.annotation.Nullable;
+
 import io.github.ranger3462.deepmines.MinesPieces.Kind;
 import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonLayout;
 import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonLayout.Cell;
@@ -39,13 +41,29 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
 
 /**
  * Turns a floor's layout (from Dungeon Delving's generator) into the Mines' pieces in the world: a room per cell, a
- * corridor per connection and a cap in every doorway with no corridor. Then each piece's ore spots become ore from the
- * floor's table, and its spawners get their mobs. A room or corridor is deepslate, with deepslate ore, as often as
- * its floor's depth says ({@link OreTable#deepslateChance}).
+ * corridor per connection and a cap in every doorway with no corridor. Rooms and corridors are carved fresh, each from
+ * its own seed ({@link RoomCarver}), unless a hand-built one is picked instead. Then each piece's ore spots become ore
+ * from the floor's table, and its spawners get their mobs. A room or corridor is deepslate, with deepslate ore, as
+ * often as its floor's depth says ({@link OreTable#deepslateChance}).
  */
 public final class MinesBuilder {
-    /** One piece to place, by the minimum corner of the space it fills once turned. */
-    public record Placement(ResourceLocation template, Kind kind, BlockPos targetMin, Rotation rotation, Mirror mirror) {}
+    /**
+     * One piece to place, by the minimum corner of the space it fills once turned: a saved piece ({@code template}), or
+     * with no template, one carved from {@code seed}.
+     */
+    public record Placement(@Nullable ResourceLocation template, Kind kind, BlockPos targetMin, Rotation rotation, Mirror mirror, long seed) {
+        public static Placement saved(ResourceLocation template, Kind kind, BlockPos targetMin, Rotation rotation, Mirror mirror) {
+            return new Placement(template, kind, targetMin, rotation, mirror, 0);
+        }
+
+        public static Placement carved(Kind kind, BlockPos targetMin, Rotation rotation, long seed) {
+            return new Placement(null, kind, targetMin, rotation, Mirror.NONE, seed);
+        }
+
+        public boolean isCarved() {
+            return template == null;
+        }
+    }
 
     /** What a piece's stone becomes in deepslate: the stones together, tuff with deepslate. */
     private static final RuleProcessor DEEPSLATE = new RuleProcessor(List.of(
@@ -65,6 +83,31 @@ public final class MinesBuilder {
         return new ProcessorRule(new BlockMatchTest(from), AlwaysTrueTest.INSTANCE, to.defaultBlockState());
     }
 
+    /** The same swap, for carved pieces. */
+    private static BlockState deepslate(BlockState state) {
+        if (state.is(Blocks.STONE)) {
+            return Blocks.DEEPSLATE.defaultBlockState();
+        } else if (state.is(Blocks.ANDESITE) || state.is(Blocks.DIORITE) || state.is(Blocks.GRANITE)) {
+            return Blocks.TUFF.defaultBlockState();
+        } else if (state.is(Blocks.COBBLESTONE) || state.is(Blocks.MOSSY_COBBLESTONE)) {
+            return Blocks.COBBLED_DEEPSLATE.defaultBlockState();
+        }
+        return state;
+    }
+
+    /**
+     * A room or corridor of a kind: usually carved, from a seed off {@code random}; sometimes (as often as the config
+     * says) a hand-built one, if there are any of the kind.
+     */
+    private static Placement roomOrCorridor(Kind kind, MinesPieces pieces, BlockPos min, Rotation rotation, Mirror mirror, RandomSource random) {
+        long seed = random.nextLong();
+        if (!pieces.pool(kind).isEmpty() && random.nextInt(100) < Config.HAND_BUILT.get()) {
+            return Placement.saved(pieces.pick(kind, random), kind, min, rotation, mirror);
+        }
+        // Carved rooms are made for their spot, so they're never turned; corridors are carved along z, and turned to run along x.
+        return Placement.carved(kind, min, kind == Kind.TUNNEL ? rotation : Rotation.NONE, seed);
+    }
+
     /** The minimum corner of a cell's room, for a floor whose first room's floor is centered on {@code center}. */
     public static BlockPos roomMin(BlockPos center, Cell cell) {
         return center.offset(cell.x() * GRID_PITCH - MID, 0, cell.z() * GRID_PITCH - MID);
@@ -81,7 +124,7 @@ public final class MinesBuilder {
                 .toList();
         for (Room room : rooms) {
             Kind kind = kinds.getOrDefault(room.cell(), Kind.COMMON);
-            placements.add(new Placement(pieces.pick(kind, random), kind, roomMin(center, room.cell()), room.rotation(), room.mirror()));
+            placements.add(roomOrCorridor(kind, pieces, roomMin(center, room.cell()), room.rotation(), room.mirror(), random));
         }
 
         for (Connection connection : layout.connections().stream()
@@ -92,11 +135,9 @@ public final class MinesBuilder {
             // Corridors run along z; turn them a quarter for east-west ones. Either way one starts just outside the
             // room, centered on its doorway.
             if (connection.alongX()) {
-                placements.add(new Placement(pieces.pick(Kind.TUNNEL, random), Kind.TUNNEL, fromMin.offset(ROOM_SIZE, TUNNEL_Y, TUNNEL_START),
-                        Rotation.CLOCKWISE_90, Mirror.NONE));
+                placements.add(roomOrCorridor(Kind.TUNNEL, pieces, fromMin.offset(ROOM_SIZE, TUNNEL_Y, TUNNEL_START), Rotation.CLOCKWISE_90, Mirror.NONE, random));
             } else {
-                placements.add(new Placement(pieces.pick(Kind.TUNNEL, random), Kind.TUNNEL, fromMin.offset(TUNNEL_START, TUNNEL_Y, ROOM_SIZE),
-                        Rotation.NONE, Mirror.NONE));
+                placements.add(roomOrCorridor(Kind.TUNNEL, pieces, fromMin.offset(TUNNEL_START, TUNNEL_Y, ROOM_SIZE), Rotation.NONE, Mirror.NONE, random));
             }
         }
 
@@ -110,10 +151,10 @@ public final class MinesBuilder {
                 // Caps plug the doorway hole in the room's wall. They run along x; turn them a quarter for west and east.
                 ResourceLocation cap = pieces.pick(Kind.CAP, random);
                 placements.add(switch (direction) {
-                    case NORTH -> new Placement(cap, Kind.CAP, min.offset(DOOR_START, DOOR_BOTTOM_Y, 0), Rotation.NONE, Mirror.NONE);
-                    case SOUTH -> new Placement(cap, Kind.CAP, min.offset(DOOR_START, DOOR_BOTTOM_Y, max), Rotation.NONE, Mirror.NONE);
-                    case WEST -> new Placement(cap, Kind.CAP, min.offset(0, DOOR_BOTTOM_Y, DOOR_START), Rotation.CLOCKWISE_90, Mirror.NONE);
-                    default -> new Placement(cap, Kind.CAP, min.offset(max, DOOR_BOTTOM_Y, DOOR_START), Rotation.CLOCKWISE_90, Mirror.NONE);
+                    case NORTH -> Placement.saved(cap, Kind.CAP, min.offset(DOOR_START, DOOR_BOTTOM_Y, 0), Rotation.NONE, Mirror.NONE);
+                    case SOUTH -> Placement.saved(cap, Kind.CAP, min.offset(DOOR_START, DOOR_BOTTOM_Y, max), Rotation.NONE, Mirror.NONE);
+                    case WEST -> Placement.saved(cap, Kind.CAP, min.offset(0, DOOR_BOTTOM_Y, DOOR_START), Rotation.CLOCKWISE_90, Mirror.NONE);
+                    default -> Placement.saved(cap, Kind.CAP, min.offset(max, DOOR_BOTTOM_Y, DOOR_START), Rotation.CLOCKWISE_90, Mirror.NONE);
                 });
             }
         }
@@ -126,32 +167,40 @@ public final class MinesBuilder {
      * floor's ore, and its spawners get mobs.
      */
     public static void place(ServerLevel level, Placement placement, int floor, RandomSource random) {
-        StructureTemplate template = level.getStructureManager().get(placement.template())
-                .orElseThrow(() -> new IllegalStateException("Missing Mines piece " + placement.template()));
         boolean deep = random.nextDouble() < OreTable.deepslateChance(floor);
-        StructurePlaceSettings settings = new StructurePlaceSettings().setRotation(placement.rotation()).setMirror(placement.mirror())
-                .setLiquidSettings(LiquidSettings.IGNORE_WATERLOGGING);
-        if (deep) {
-            settings.addProcessor(DEEPSLATE);
-        }
-        BoundingBox box = template.getBoundingBox(settings, BlockPos.ZERO);
-        BlockPos pos = placement.targetMin().offset(-box.minX(), -box.minY(), -box.minZ());
-        template.placeInWorld(level, pos, pos, settings, random, Block.UPDATE_CLIENTS);
-
         Set<BlockPos> spots = new HashSet<>();
-        template.filterBlocks(pos, settings, ModBlocks.ORE_SPOT.get()).forEach(info -> spots.add(info.pos().immutable()));
+        List<BlockPos> spawners = new ArrayList<>();
+        if (placement.isCarved()) {
+            MinesGrid.Placed placed = RoomCarver.carve(placement.kind(), placement.seed()).grid()
+                    .place(level, placement.targetMin(), placement.rotation(), deep ? MinesBuilder::deepslate : state -> state);
+            spots.addAll(placed.oreSpots());
+            spawners.addAll(placed.spawners());
+        } else {
+            StructureTemplate template = level.getStructureManager().get(placement.template())
+                    .orElseThrow(() -> new IllegalStateException("Missing Mines piece " + placement.template()));
+            StructurePlaceSettings settings = new StructurePlaceSettings().setRotation(placement.rotation()).setMirror(placement.mirror())
+                    .setLiquidSettings(LiquidSettings.IGNORE_WATERLOGGING);
+            if (deep) {
+                settings.addProcessor(DEEPSLATE);
+            }
+            BoundingBox box = template.getBoundingBox(settings, BlockPos.ZERO);
+            BlockPos pos = placement.targetMin().offset(-box.minX(), -box.minY(), -box.minZ());
+            template.placeInWorld(level, pos, pos, settings, random, Block.UPDATE_CLIENTS);
+            template.filterBlocks(pos, settings, ModBlocks.ORE_SPOT.get()).forEach(info -> spots.add(info.pos().immutable()));
+            template.filterBlocks(pos, settings, Blocks.SPAWNER).forEach(info -> spawners.add(info.pos().immutable()));
+        }
+
         for (List<BlockPos> vein : veins(spots)) {
             Block ore = OreTable.pick(floor, random).block(deep);
             BlockState state = ore == Blocks.AIR ? (deep ? Blocks.DEEPSLATE : Blocks.STONE).defaultBlockState() : ore.defaultBlockState();
             vein.forEach(spot -> level.setBlock(spot, state, Block.UPDATE_CLIENTS));
         }
-
-        template.filterBlocks(pos, settings, Blocks.SPAWNER).forEach(info -> {
-            if (level.getBlockEntity(info.pos()) instanceof SpawnerBlockEntity spawner) {
+        for (BlockPos pos : spawners) {
+            if (level.getBlockEntity(pos) instanceof SpawnerBlockEntity spawner) {
                 spawner.setEntityId(SPAWNER_MOBS.get(random.nextInt(SPAWNER_MOBS.size())), random);
                 spawner.setChanged();
             }
-        });
+        }
     }
 
     /** Groups ore spots into veins: spots touching face to face are one vein. */

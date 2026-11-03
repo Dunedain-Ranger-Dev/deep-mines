@@ -8,7 +8,8 @@ A mining dimension for NeoForge 1.21.1 that resets on a schedule, so nobody has 
 - **The Mines:** 100 floors below the entrance hall, each a few big rooms of rock joined by low timbered mineshafts,
   with a ladder down in the farthest room. The deeper the floor, the better its ore, and deepslate from about floor 50.
   Rooms are common (the usual amount of ore, to dig down or up into), quarries (packed with ore), flooded (a deep pool
-  to dive into) or infested (spawners). Floors are built the first time someone reaches them. Around the floors is
+  to dive into) or infested (spawners), and every room and corridor is carved fresh, so no two are alike. Floors are
+  built the first time someone reaches them. Around the floors is
   cave terrain (vanilla's caves world type with overworld biomes, plus its water and lava pockets, which YUNG's
   Better Caves needs), until the floors replace it.
 - **Resets:** once `resetDays` days (default 7, in `config/deepmines-common.toml`) have passed, the Mines are wiped
@@ -38,4 +39,5 @@ To build, check out dungeon-delving next to this repository; Gradle builds it fr
 ## Building
 
 `./gradlew build` (Java 21). `./gradlew runClient` to play, `./gradlew runGameTestServer` for the tests, and
-`./gradlew runData` to regenerate the Mines' pieces (`src/generated/resources/`, committed).
+`./gradlew runData` to regenerate the Mines' fixed pieces, the start hall and the cap (`src/generated/resources/`,
+committed). Rooms and corridors are carved by `RoomCarver` as floors are built.
