@@ -22,8 +22,8 @@ A living space where players go to gather resources on a more frequent schedule 
   dais in the middle for the dwarf who'll give out quests, workshops along the walls, a ladder down to floor 1 and a
   ladder up back out to wherever they came in from. (Custom Portal API still makes its arrival portal in the caves
   below the floors, but no one is left there.)
-- **Floors.** 100 of them below the start floor. Each has a few rooms (3 by default) joined by corridors, then a
-  ladder down to the next. The deeper the floor, the better its ore (see [Ore by floor](#ore-by-floor)).
+- **Floors.** 100 of them below the start floor. Each has more rooms the deeper it is (3 to 5 down to floor 25, 6
+  to 9 down to 50, 10 to 15 down to 75, then 16 to 25) joined by corridors, then a ladder down to the next. The deeper the floor, the better its ore (see [Ore by floor](#ore-by-floor)).
   - **Decided (MINE-14):** floors sit side by side, each in its own 1024-block stretch of the Mines east of the last,
     rather than stacked (100 stacked floors would need a dimension about 1,600 blocks tall). The ladder down in a
     floor's farthest room takes players to the next floor's first room, where a ladder up leads back. Ladders stand
@@ -120,7 +120,6 @@ the `deepmines:in_mines` filter).
 |---|---|---|
 | Reset frequency | 7 days | How often the Mines reset |
 | Floors | 100 | How many floors the Mines go down (`floors`) |
-| Rooms per floor | 3 | How many rooms each floor has (`cavesPerFloor`) |
 | Room mix | 50 / 15 / 15 / 20 / 10 | How often common, quarry, flooded, infested and vein rooms come up, as weights (`[rooms]`) |
 | Hand-built rooms | 25% | How often a hand-built room or corridor is used instead of a carved one, if there are any (`handBuilt`) |
 | Team Mines | Off (server-wide) | Ties the Mines to each FTB Team or party instead, to prevent griefing |

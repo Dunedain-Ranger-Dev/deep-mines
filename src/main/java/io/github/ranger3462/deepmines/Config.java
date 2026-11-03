@@ -15,10 +15,6 @@ public final class Config {
             .comment("How many floors the Mines go down. Each floor is built the first time someone reaches it.")
             .defineInRange("floors", 100, 1, 1000);
 
-    public static final ModConfigSpec.IntValue CAVES_PER_FLOOR = BUILDER
-            .comment("How many rooms each floor has, joined by corridors. The first has the ladder up, the farthest the ladder down.")
-            .defineInRange("cavesPerFloor", 3, 2, 20);
-
     static {
         BUILDER.comment("How often each kind of room comes up on a floor, as weights (the first room is always common).")
                 .push("rooms");

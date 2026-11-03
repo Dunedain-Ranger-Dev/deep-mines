@@ -71,10 +71,16 @@ public final class MinesFloors {
         RandomSource random = RandomSource.create(level.getRandom().nextLong());
         long started = System.nanoTime();
         Floor floor = number == START ? buildStart(level, center(base, START), random)
-                : buildFloor(level, center(base, number), number, Config.CAVES_PER_FLOOR.get(), random);
+                : buildFloor(level, center(base, number), number, rooms(number, random), random);
         DeepMines.LOGGER.info("Built floor {} of the Mines in {} ms", number, (System.nanoTime() - started) / 1_000_000);
         data.put(floor);
         return floor;
+    }
+
+    /** How many rooms a floor has, more the deeper it is: 3 to 5 down to floor 25, 6 to 9 to 50, 10 to 15 to 75, then 16 to 25. */
+    public static int rooms(int floor, RandomSource random) {
+        int[] range = floor <= 25 ? new int[] { 3, 5 } : floor <= 50 ? new int[] { 6, 9 } : floor <= 75 ? new int[] { 10, 15 } : new int[] { 16, 25 };
+        return range[0] + random.nextInt(range[1] - range[0] + 1);
     }
 
     /** What each room of a layout is: the first is common, the rest as the config's weights say. */
