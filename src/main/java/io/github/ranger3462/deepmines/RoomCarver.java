@@ -44,8 +44,8 @@ import net.minecraft.world.level.block.state.properties.RailShape;
  * <li>Vein rooms: no cave, but timbered galleries driven through the rock after one ore, in very large veins.</li>
  * <li>Corridors: timbered mineshafts in the style of YUNG's Better Mineshafts, with a little ore.</li>
  * </ul>
- * A cave's floor rises and falls a little, but stays level along its rail line, and its roof has no notches or slots
- * left in it.
+ * A cave's floor rises and falls a little, but stays level along its rail line; its walls, roof and floor are worn
+ * into bulges and hollows; and its roof has no notches or slots left in it.
  * A room's rail line runs in from each doorway with a corridor to the middle, so following the rails leads on and a
  * doorway without them is a dead end. Every vein of ore shows somewhere, or touches one that does, so there's always
  * something to see that's worth digging towards. Every room is checked against the rules a floor relies on
@@ -190,6 +190,7 @@ public final class RoomCarver {
             chamber(g, random, Math.max(9, Math.min(MAX - 9, ax)), Math.max(9, Math.min(MAX - 9, az)), 4 + random.nextInt(4), 2 + random.nextInt(4));
         }
         terrain(g, random, rough);
+        roughen(g, random);
     }
 
     /**
@@ -284,6 +285,96 @@ public final class RoomCarver {
             if (!changed) {
                 return;
             }
+        }
+    }
+
+    /**
+     * Wears a cave's rock faces (walls, roof and floor) into bulges and hollows, by smooth 3D noise, so it isn't all
+     * straight lines: where the noise is high the face is dug back, where it's low it bulges out. Two passes, so a face
+     * can move up to 2 blocks. The landings stay as they are, and along the rail lines the floor stays level with room
+     * to walk.
+     */
+    private static void roughen(MinesGrid g, Random random) {
+        Noise broad = new Noise(random.nextLong());
+        Noise fine = new Noise(random.nextLong());
+        for (int pass = 0; pass < 2; pass++) {
+            List<int[]> dig = new ArrayList<>();
+            List<int[]> fill = new ArrayList<>();
+            for (int x = 2; x <= MAX - 2; x++) {
+                for (int z = 2; z <= MAX - 2; z++) {
+                    if (inLanding(x, z)) {
+                        continue;
+                    }
+                    boolean band = Math.abs(x - MID) <= 3 || Math.abs(z - MID) <= 3;
+                    for (int y = 2; y <= TOP - 2; y++) {
+                        boolean rock = g.rock(x, y, z);
+                        boolean air = g.air(x, y, z);
+                        if (!rock && !air || band && y <= WALK_Y + (air ? 3 : 0)) {
+                            continue;
+                        }
+                        boolean face = false;
+                        for (Direction d : Direction.values()) {
+                            int nx = x + d.getStepX();
+                            int ny = y + d.getStepY();
+                            int nz = z + d.getStepZ();
+                            if (rock ? g.air(nx, ny, nz) : g.rock(nx, ny, nz)) {
+                                face = true;
+                                break;
+                            }
+                        }
+                        if (!face) {
+                            continue;
+                        }
+                        double v = 0.65 * broad.at(x / 6.0, y / 4.0, z / 6.0) + 0.35 * fine.at(x / 2.5, y / 2.5, z / 2.5);
+                        if (rock && v > 0.2) {
+                            dig.add(new int[] { x, y, z });
+                        } else if (air && y > WALK_Y && v < -0.3) {
+                            fill.add(new int[] { x, y, z });
+                        }
+                    }
+                }
+            }
+            dig.forEach(p -> g.carve(p[0], p[1], p[2]));
+            fill.forEach(p -> g.setType(p[0], p[1], p[2], ROCK));
+        }
+    }
+
+    /** Smooth 3D value noise, from -1 to 1, changing over about a unit. */
+    private static final class Noise {
+        private final long seed;
+
+        Noise(long seed) {
+            this.seed = seed;
+        }
+
+        double at(double x, double y, double z) {
+            int x0 = (int) Math.floor(x);
+            int y0 = (int) Math.floor(y);
+            int z0 = (int) Math.floor(z);
+            double fx = ease(x - x0);
+            double fy = ease(y - y0);
+            double fz = ease(z - z0);
+            double result = 0;
+            for (int i = 0; i < 8; i++) {
+                int dx = i & 1;
+                int dy = i >> 1 & 1;
+                int dz = i >> 2 & 1;
+                double w = (dx == 1 ? fx : 1 - fx) * (dy == 1 ? fy : 1 - fy) * (dz == 1 ? fz : 1 - fz);
+                result += w * corner(x0 + dx, y0 + dy, z0 + dz);
+            }
+            return result;
+        }
+
+        private static double ease(double t) {
+            return t * t * (3 - 2 * t);
+        }
+
+        private double corner(int x, int y, int z) {
+            long h = seed ^ x * 0x9E3779B97F4A7C15L ^ y * 0xC2B2AE3D27D4EB4FL ^ z * 0x165667B19E3779F9L;
+            h = (h ^ h >>> 31) * 0xBF58476D1CE4E5B9L;
+            h = (h ^ h >>> 29) * 0x94D049BB133111EBL;
+            h ^= h >>> 32;
+            return (h >>> 11) * 0x1.0p-53 * 2 - 1;
         }
     }
 
@@ -895,18 +986,18 @@ public final class RoomCarver {
         MinesGrid g = room(random);
         if (random.nextBoolean()) {
             // Old workings instead of a cave, with the usual ore of every kind in smaller veins.
-            workings(g, random, 10, 16);
+            workings(g, random, 6, 10);
             Near workings = (x, y, z) -> y > WALK_Y;
-            veinsNear(g, random, between(random, 60, 80), workings, 3, 4, 9);
-            veins(g, random, between(random, 20, 30), 2, TOP - 2, 4, 9);
+            veinsNear(g, random, between(random, 15, 20), workings, 3, 4, 9);
+            veins(g, random, between(random, 5, 8), 2, TOP - 2, 4, 9);
             decorate(g, random, 30);
             return g;
         }
         cave(g, random, between(random, 10, 15), up ? between(random, 3, 5) : between(random, 6, 10), between(random, 3, 7), 4, 3);
         drifts(g, random, between(random, 1, 3), true, up);
         smoothRoof(g);
-        int main = between(random, 65, 85);
-        int other = between(random, 20, 30);
+        int main = between(random, 16, 21);
+        int other = between(random, 5, 8);
         if (up) {
             veins(g, random, main, WALK_Y + 6, TOP - 2, 4, 9);
             veins(g, random, other, 2, WALK_Y - 1, 4, 9);
@@ -959,8 +1050,8 @@ public final class RoomCarver {
         }
         smoothRoof(g);
         Near pit = (x, y, z) -> y <= WALK_Y && Math.abs(x - MID) <= widest + 1 && Math.abs(z - MID) <= widest + 1;
-        veinsNear(g, random, between(random, 140, 180), pit, 3, 4, 9);
-        veins(g, random, 40, 2, TOP - 2, 4, 9);
+        veinsNear(g, random, between(random, 35, 45), pit, 3, 4, 9);
+        veins(g, random, 10, 2, TOP - 2, 4, 9);
 
         // Lanterns on posts out on the rim at the corners, and a chain hoist hung from the roof down into the pit.
         for (int[] c : new int[][] { { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) {
@@ -1042,8 +1133,8 @@ public final class RoomCarver {
             }
         }
         Near pool = (x, y, z) -> g.type(x, y, z) == WATER;
-        veinsNear(g, random, between(random, 95, 125), pool, 3, 4, 9);
-        veins(g, random, 25, WALK_Y + 1, TOP - 2, 4, 9);
+        veinsNear(g, random, between(random, 24, 31), pool, 3, 4, 9);
+        veins(g, random, 6, WALK_Y + 1, TOP - 2, 4, 9);
 
         // Under the water: lichen on the walls, seagrass and gravel on the bottom.
         for (int x = 1; x < MAX; x++) {
@@ -1095,8 +1186,8 @@ public final class RoomCarver {
         cave(g, random, between(random, 12, 14), between(random, 5, 9), between(random, 3, 7), 2, 3);
         drifts(g, random, between(random, 0, 2), false, false);
         smoothRoof(g);
-        veins(g, random, between(random, 60, 80), 2, WALK_Y - 1, 4, 9);
-        veins(g, random, between(random, 25, 35), WALK_Y + 1, TOP - 2, 4, 9);
+        veins(g, random, between(random, 30, 40), 2, WALK_Y - 1, 4, 9);
+        veins(g, random, between(random, 12, 18), WALK_Y + 1, TOP - 2, 4, 9);
 
         int[][] corners = { { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } };
         int skip = random.nextInt(corners.length);
@@ -1219,9 +1310,9 @@ public final class RoomCarver {
      */
     private static MinesGrid veinRoom(Random random) {
         MinesGrid g = room(random);
-        workings(g, random, 40, 70);
+        workings(g, random, 20, 35);
         Near workings = (x, y, z) -> y > WALK_Y;
-        veinsNear(g, random, between(random, 13, 17), workings, 2, 50, 90);
+        veinsNear(g, random, between(random, 3, 4), workings, 2, 50, 90);
         decorate(g, random, 30);
         return g;
     }

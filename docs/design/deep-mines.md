@@ -35,7 +35,9 @@ A living space where players go to gather resources on a more frequent schedule 
   doorway is a landing (solid floor, clear air) so a corridor always leads somewhere to stand. Rooms and corridors are
   carved fresh when a floor is built, each from its own seed (`RoomCarver`), so no two are alike. The kinds (how often
   each comes up is a setting, a weight; a floor's first room is always common). A cave's floor rises and falls up to
-  3 blocks, but stays level along the rail line, and its roof is smoothed of notches and slots:
+  3 blocks, but stays level along the rail line. Its walls, roof and floor are worn into bulges and hollows by 3D
+  noise, so they aren't straight lines, and its roof is smoothed of notches and slots. Ore is kept sparse: about 200
+  blocks in a common room, 230 flooded, 310 vein, 340 quarry and 390 infested:
   - `common_` (50): the usual amount of ore. Half are caves: "dig down" ones have it mostly under the cave's floor,
     "dig up" ones (with lower caves) mostly overhead, and old abandoned drifts lead off the cave towards veins and end
     in a shaft sunk or raised towards more, showing where to dig. The other half are old workings laid out like a vein
@@ -46,7 +48,7 @@ A living space where players go to gather resources on a more frequent schedule 
     and the usual amount of ore.
   - `vein_` (10): no cave, but timbered galleries (like the corridors) in from every doorway to a hall in the middle,
     with crosscuts off them ending at veins. Very large veins show in the galleries' walls and roofs, all of one ore,
-    picked from the floor's table when the floor is built. About 40% more ore than a common room.
+    picked from the floor's table when the floor is built. About half again as much ore as a common room.
   - `tunnel_`: corridors, 11 x 10 x 31: a timbered mineshaft with a passage 7 wide and 6 high, with a little ore.
     Every 4 to 6 blocks a support: stripped spruce legs on upright barrels, a beam across their tops with 5 blocks
     under it (7 wide, over the legs), an upside-down spruce stair in each inside corner with spruce trapdoors flush

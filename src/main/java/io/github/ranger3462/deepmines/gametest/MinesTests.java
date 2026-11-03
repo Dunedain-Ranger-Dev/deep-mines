@@ -280,10 +280,10 @@ public class MinesTests {
         helper.assertTrue(bridged * 20 <= total, bridged + " of " + total + " needed walkways");
         double common = ore.get(Kind.COMMON).stream().mapToInt(Integer::intValue).average().orElse(0);
         double quarry = ore.get(Kind.QUARRY).stream().mapToInt(Integer::intValue).average().orElse(0);
-        helper.assertTrue(common > 300 && quarry > common * 1.5, "quarries should have far more ore than common rooms: " + common + ", " + quarry);
+        helper.assertTrue(common > 100 && quarry > common * 1.5, "quarries should have far more ore than common rooms: " + common + ", " + quarry);
         double vein = ore.get(Kind.VEIN).stream().mapToInt(Integer::intValue).average().orElse(0);
         helper.assertTrue(vein > common * 1.2, "vein rooms should have more ore than common rooms: " + common + ", " + vein);
-        helper.assertTrue(ore.get(Kind.COMMON).stream().allMatch(n -> n > 200), "every common room has a fair bit of ore: " + ore.get(Kind.COMMON));
+        helper.assertTrue(ore.get(Kind.COMMON).stream().allMatch(n -> n > 50), "every common room has a fair bit of ore: " + ore.get(Kind.COMMON));
         helper.assertTrue(ore.get(Kind.TUNNEL).stream().allMatch(n -> n < 30)
                 && ore.get(Kind.TUNNEL).stream().mapToInt(Integer::intValue).average().orElse(0) > 3, "corridors have a little ore: " + ore.get(Kind.TUNNEL));
         Set<Direction> all = EnumSet.allOf(Direction.class);
@@ -466,7 +466,7 @@ public class MinesTests {
 
         helper.assertTrue(problems.isEmpty(), problems.size() + " problems, first: " + problems.stream().limit(3).toList());
         helper.assertTrue(counts[0] == 0 && counts[1] > 10000, "floor 100 is deepslate and tuff: " + counts[0] + " stone, " + counts[1] + " deepslate");
-        helper.assertTrue(counts[2] > 300 && counts[3] >= 2, counts[2] + " ore, " + counts[3] + " spawners of undead");
+        helper.assertTrue(counts[2] > 150 && counts[3] >= 2, counts[2] + " ore, " + counts[3] + " spawners of undead");
         helper.succeed();
     }
 
@@ -517,7 +517,7 @@ public class MinesTests {
             ore[0] += state.is(Tags.Blocks.ORES) ? 1 : 0;
             ore[1] += state.is(ModBlocks.ORE_SPOT.get()) ? 1 : 0;
         });
-        helper.assertTrue(ore[0] > 300 && ore[1] == 0, "floor 1's first room has " + ore[0] + " ore and " + ore[1] + " spots left");
+        helper.assertTrue(ore[0] > 50 && ore[1] == 0, "floor 1's first room has " + ore[0] + " ore and " + ore[1] + " spots left");
 
         Optional<BlockPos> up = MinesFloors.ascend(player, level, base, 2);
         helper.assertTrue(up.equals(Optional.of(one.arrivalFromBelow())), "going up lands beside floor 1's ladder down: " + up);
