@@ -24,10 +24,14 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 /**
  * Builds the Mines' floors: Dungeon Delving's layout generator decides where a floor's rooms go and which are joined,
- * and {@link MinesBuilder} fills them with rooms and corridors carved fresh for the floor.
+ * and {@link MinesBuilder} fills them with rooms and corridors carved fresh for the floor. Floors are built a little
+ * each tick ({@link MinesBuildQueue}), starting with the room players arrive in, and filling in outward from it; players
+ * are sent down (or up) once their room is ready. Each floor's seed comes from the world's and how many times the Mines
+ * have been reset, so a floor left half built when the server stopped is built again the same.
  * <p>
  * Floor 0 is the start floor, the same for every Mines: one hall, where players come in, with a ladder up out of the
  * Mines and a ladder down to floor 1. Below it, floors sit side by side, each in its own {@link #FLOOR_SPACING}-block
@@ -61,20 +65,37 @@ public final class MinesFloors {
         return Math.floorDiv(pos.getX() - base.getX() + FLOOR_SPACING / 2, FLOOR_SPACING) + 1;
     }
 
-    /** A floor, built now if no one has reached it yet. */
+    /** A floor, built (all at once) if no one has reached it yet. */
     public static Floor floor(ServerLevel level, BlockPos base, int number) {
-        MinesFloorsData data = MinesFloorsData.get(level);
-        Optional<Floor> built = data.floor(number);
-        if (built.isPresent()) {
-            return built.get();
-        }
-        RandomSource random = RandomSource.create(level.getRandom().nextLong());
-        long started = System.nanoTime();
-        Floor floor = number == START ? buildStart(level, center(base, START), random)
-                : buildFloor(level, center(base, number), number, rooms(number, random), random);
-        DeepMines.LOGGER.info("Built floor {} of the Mines in {} ms", number, (System.nanoTime() - started) / 1_000_000);
-        data.put(floor);
+        Floor floor = floor(level, base, number, true);
+        MinesBuildQueue.finish(level.getServer());
         return floor;
+    }
+
+    /**
+     * A floor, which starts being built if no one has reached it yet: from the room with its ladder up if
+     * {@code fromAbove}, or else the one with its ladder down. The start floor, just one hall, is built at once.
+     */
+    public static Floor floor(ServerLevel level, BlockPos base, int number, boolean fromAbove) {
+        MinesFloorsData data = MinesFloorsData.get(level);
+        Optional<Floor> known = data.known(number);
+        if (known.isPresent()) {
+            return known.get();
+        }
+        RandomSource random = RandomSource.create(seed(level, number));
+        if (number == START) {
+            long started = System.nanoTime();
+            Floor floor = buildStart(level, center(base, START), random);
+            DeepMines.LOGGER.info("Built floor {} of the Mines in {} ms", number, (System.nanoTime() - started) / 1_000_000);
+            data.put(floor);
+            return floor;
+        }
+        return buildFloor(level, center(base, number), number, rooms(number, random), random, fromAbove);
+    }
+
+    /** A floor's seed: the same for the same world, floor and number of resets. */
+    private static long seed(ServerLevel level, int number) {
+        return level.getSeed() ^ MinesReset.get().resets() * 0x9E3779B97F4A7C15L ^ (number + 1) * 0xC2B2AE3D27D4EB4FL;
     }
 
     /** How many rooms a floor has, more the deeper it is: 3 to 5 down to floor 25, 6 to 9 to 50, 10 to 15 to 75, then 16 to 25. */
@@ -118,22 +139,45 @@ public final class MinesFloors {
     }
 
     /**
-     * Builds a floor all at once (a short pause the first time anyone reaches it), then its ladders: up in the first
-     * room, down in the farthest.
+     * Queues a floor's building, its ladders (up in the first room, down in the farthest) each right after their room,
+     * and the room at the end players arrive at ({@code fromAbove}, by the ladder up) first. It's marked built once
+     * all of it is.
      */
-    static Floor buildFloor(ServerLevel level, BlockPos center, int number, int rooms, RandomSource random) {
+    static Floor buildFloor(ServerLevel level, BlockPos center, int number, int rooms, RandomSource random, boolean fromAbove) {
         DungeonLayout layout = DungeonLayoutGenerator.generate(random, rooms);
-        MinesBuilder.plan(layout, kinds(layout, random), pieces(level), center, random)
-                .forEach(placement -> MinesBuilder.place(level, placement, number, random));
-
         Cell farthest = layout.distancesFromStart().entrySet().stream()
                 .max(Map.Entry.<Cell, Integer>comparingByValue().thenComparing(Map.Entry::getKey, Comparator.comparingInt(Cell::x).thenComparingInt(Cell::z)))
                 .orElseThrow().getKey();
         BlockPos[] up = ladderSpot(layout, center, Cell.ORIGIN);
         BlockPos[] down = ladderSpot(layout, center, farthest);
-        placeLadder(level, up, ModBlocks.LADDER_UP.get());
-        placeLadder(level, down, ModBlocks.LADDER_DOWN.get());
-        return new Floor(number, up[0], down[0], up[1], down[1]);
+        Floor floor = new Floor(number, up[0], down[0], up[1], down[1]);
+        MinesFloorsData data = MinesFloorsData.get(level);
+        data.startBuilding(floor);
+
+        long started = System.nanoTime();
+        BlockPos upRoom = MinesBuilder.roomMin(center, Cell.ORIGIN);
+        BlockPos downRoom = MinesBuilder.roomMin(center, farthest);
+        for (Placement placement : MinesBuilder.plan(layout, kinds(layout, random), pieces(level), center, random, fromAbove ? Cell.ORIGIN : farthest)) {
+            MinesBuildQueue.add(level, placement.box(), MinesBuilder.build(placement, number, random), placement.kind() + " on floor " + number);
+            if (placement.kind().room() && placement.targetMin().equals(upRoom)) {
+                queueLadder(level, up, ModBlocks.LADDER_UP.get());
+            } else if (placement.kind().room() && placement.targetMin().equals(downRoom)) {
+                queueLadder(level, down, ModBlocks.LADDER_DOWN.get());
+            }
+        }
+        MinesBuildQueue.then(level, () -> {
+            data.put(floor);
+            DeepMines.LOGGER.info("Built floor {} of the Mines ({} rooms) over {} ms", number, rooms, (System.nanoTime() - started) / 1_000_000);
+        }, "floor " + number + " done");
+        return floor;
+    }
+
+    private static void queueLadder(ServerLevel level, BlockPos[] spot, Block ladder) {
+        BoundingBox box = BoundingBox.encapsulatingPositions(List.of(spot[0], spot[1], spot[1].above())).orElseThrow();
+        MinesBuildQueue.add(level, box, l -> {
+            placeLadder(l, spot, ladder);
+            return true;
+        }, "a ladder at " + spot[0].toShortString());
     }
 
     /** Builds the start floor: its hall, unturned, with a cap in every doorway, and its two ladders. */
@@ -185,7 +229,7 @@ public final class MinesFloors {
             player.displayClientMessage(Component.translatable("message.deepmines.bottom_floor"), true);
             return Optional.empty();
         }
-        return Optional.of(arrive(player, level, floor(level, base, floor + 1).arrivalFromAbove(), floor + 1));
+        return Optional.of(arrive(player, level, floor(level, base, floor + 1, true).arrivalFromAbove(), floor + 1));
     }
 
     /**
@@ -197,18 +241,27 @@ public final class MinesFloors {
             MinesEntrance.leave(player);
             return Optional.empty();
         }
-        return Optional.of(arrive(player, level, floor(level, base, floor - 1).arrivalFromBelow(), floor - 1));
+        return Optional.of(arrive(player, level, floor(level, base, floor - 1, false).arrivalFromBelow(), floor - 1));
     }
 
     /** Sends a player to a floor, by its ladder up (on the start floor, where the portal brings them in). */
     public static BlockPos visit(ServerPlayer player, ServerLevel level, BlockPos base, int floor) {
-        return arrive(player, level, floor(level, base, floor).arrivalFromAbove(), floor);
+        return arrive(player, level, floor(level, base, floor, true).arrivalFromAbove(), floor);
     }
 
+    /** Sends a player to a spot on a floor: now, or once it's built if it's still being dug out. */
     private static BlockPos arrive(ServerPlayer player, ServerLevel level, BlockPos pos, int floor) {
-        MinesEntrance.teleportWithin(player, level, pos);
-        player.displayClientMessage(floor == START ? Component.translatable("message.deepmines.start_floor")
-                : Component.translatable("message.deepmines.floor", floor), true);
+        if (MinesBuildQueue.building(level, pos)) {
+            player.displayClientMessage(Component.translatable("message.deepmines.digging", floor), true);
+        }
+        MinesBuildQueue.whenBuilt(level, pos, () -> {
+            if (player.hasDisconnected() || !player.isAlive()) {
+                return;
+            }
+            MinesEntrance.teleportWithin(player, level, pos);
+            player.displayClientMessage(floor == START ? Component.translatable("message.deepmines.start_floor")
+                    : Component.translatable("message.deepmines.floor", floor), true);
+        });
         return pos;
     }
 }

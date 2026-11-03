@@ -19,6 +19,7 @@ import com.google.gson.JsonParser;
 import com.mojang.authlib.GameProfile;
 import com.mojang.serialization.JsonOps;
 
+import io.github.ranger3462.deepmines.MinesBuildQueue;
 import io.github.ranger3462.deepmines.DeepMines;
 import io.github.ranger3462.deepmines.InMinesPlacement;
 import io.github.ranger3462.deepmines.MinesBuilder;
@@ -503,9 +504,12 @@ public class MinesTests {
 
         ServerPlayer player = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "mines_tester"));
         Optional<BlockPos> toOne = MinesFloors.descend(player, level, base, MinesFloors.START);
+        helper.assertTrue(MinesFloorsData.get(level).floor(1).isEmpty() && MinesBuildQueue.pending() > 0, "floor 1 is built a bit at a time");
+        MinesBuildQueue.finish(level.getServer());
         MinesFloorsData.Floor one = MinesFloorsData.get(level).floor(1).orElseThrow();
         helper.assertTrue(toOne.equals(Optional.of(one.arrivalFromAbove())), "going down lands beside floor 1's ladder up: " + toOne);
         Optional<BlockPos> toTwo = MinesFloors.descend(player, level, base, 1);
+        MinesBuildQueue.finish(level.getServer());
         MinesFloorsData.Floor two = MinesFloorsData.get(level).floor(2).orElseThrow();
         helper.assertTrue(toTwo.equals(Optional.of(two.arrivalFromAbove())), "and on to floor 2: " + toTwo);
         for (MinesFloorsData.Floor floor : List.of(start, one, two)) {

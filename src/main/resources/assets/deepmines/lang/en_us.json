@@ -7,6 +7,7 @@
   "block.deepmines.ladder_down": "Ladder Down",
   "block.deepmines.ladder_up": "Ladder Up",
   "message.deepmines.floor": "Floor %s of the Mines",
+  "message.deepmines.digging": "Floor %s is still being dug out...",
   "message.deepmines.bottom_floor": "This is the deepest floor of the Mines.",
   "message.deepmines.no_floor": "There's no floor %s: the Mines go down %s floors, and must be loaded.",
   "block.deepmines.ore_spot": "Ore Spot",
