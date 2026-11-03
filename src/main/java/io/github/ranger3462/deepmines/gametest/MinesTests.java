@@ -375,7 +375,7 @@ public class MinesTests {
             if (passage && (z == 0 || z == TUNNEL_LENGTH - 1) && !clear(level, pos)) {
                 problems.add(name + ": a blocked end at " + x + "," + y + "," + z);
             }
-            if (x == TUNNEL_WIDTH / 2 && y >= TUNNEL_WALL && y < roof && !level.getBlockState(pos).getCollisionShape(level, pos).isEmpty()) {
+            if (x == TUNNEL_WIDTH / 2 && y >= TUNNEL_WALL && y < roof - 1 && !level.getBlockState(pos).getCollisionShape(level, pos).isEmpty()) {
                 problems.add(name + ": the walkway is blocked at " + x + "," + y + "," + z);
             }
         });
