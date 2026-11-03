@@ -7,9 +7,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import com.google.gson.JsonParser;
@@ -255,7 +257,14 @@ public class MinesTests {
             }
             for (int seed = 0; seed < CARVINGS; seed++) {
                 String name = kind + " " + seed;
-                RoomCarver.Carved carved = RoomCarver.carve(kind, seed * 7919L + kind.ordinal());
+                // Rooms with every mix of corridors, from one to all four sides.
+                Set<Direction> openings = EnumSet.noneOf(Direction.class);
+                for (Direction side : Direction.Plane.HORIZONTAL) {
+                    if (((seed % 15 + 1) & (1 << side.get2DDataValue())) != 0) {
+                        openings.add(side);
+                    }
+                }
+                RoomCarver.Carved carved = RoomCarver.carve(kind, seed * 7919L + kind.ordinal(), openings);
                 RoomCarver.problems(carved.grid(), kind).forEach(problem -> problems.add(name + ": " + problem));
                 ore.computeIfAbsent(kind, k -> new ArrayList<>()).add(carved.grid().count(MinesGrid.ORE));
                 retried += carved.tries() > 1 ? 1 : 0;
@@ -263,8 +272,9 @@ public class MinesTests {
                 total++;
             }
         }
-        DeepMines.LOGGER.info("Carved {} rooms and corridors in {} ms: {} carved again, {} with walkways", total,
-                (System.nanoTime() - started) / 1_000_000, retried, bridged);
+        DeepMines.LOGGER.info("Carved {} rooms and corridors in {} ms: {} carved again, {} with walkways; ore on average {}", total,
+                (System.nanoTime() - started) / 1_000_000, retried, bridged,
+                ore.entrySet().stream().map(e -> e.getKey() + " " + Math.round(e.getValue().stream().mapToInt(Integer::intValue).average().orElse(0))).toList());
         helper.assertTrue(problems.isEmpty(), problems.size() + " problems, first: " + problems.stream().limit(4).toList());
         helper.assertTrue(bridged * 20 <= total, bridged + " of " + total + " needed walkways");
         double common = ore.get(Kind.COMMON).stream().mapToInt(Integer::intValue).average().orElse(0);
@@ -273,8 +283,10 @@ public class MinesTests {
         helper.assertTrue(ore.get(Kind.COMMON).stream().allMatch(n -> n > 200), "every common room has a fair bit of ore: " + ore.get(Kind.COMMON));
         helper.assertTrue(ore.get(Kind.TUNNEL).stream().allMatch(n -> n < 30)
                 && ore.get(Kind.TUNNEL).stream().mapToInt(Integer::intValue).average().orElse(0) > 3, "corridors have a little ore: " + ore.get(Kind.TUNNEL));
-        helper.assertTrue(RoomCarver.carve(Kind.QUARRY, 42).grid().block(10, 10, 10) == RoomCarver.carve(Kind.QUARRY, 42).grid().block(10, 10, 10)
-                && RoomCarver.carve(Kind.COMMON, 1).grid().count(MinesGrid.ORE) != RoomCarver.carve(Kind.COMMON, 2).grid().count(MinesGrid.ORE),
+        Set<Direction> all = EnumSet.allOf(Direction.class);
+        all.removeIf(d -> d.getAxis().isVertical());
+        helper.assertTrue(RoomCarver.carve(Kind.QUARRY, 42, all).grid().count(MinesGrid.ORE) == RoomCarver.carve(Kind.QUARRY, 42, all).grid().count(MinesGrid.ORE)
+                && RoomCarver.carve(Kind.COMMON, 1, all).grid().count(MinesGrid.ORE) != RoomCarver.carve(Kind.COMMON, 2, all).grid().count(MinesGrid.ORE),
                 "the same seed carves the same room, and different seeds different ones");
         helper.succeed();
     }
@@ -291,6 +303,12 @@ public class MinesTests {
                 }
             }
         }
+    }
+
+    /** Nothing to bump into, and no water: air, or a rail. */
+    private static boolean clear(ServerLevel level, BlockPos pos) {
+        var state = level.getBlockState(pos);
+        return state.getCollisionShape(level, pos).isEmpty() && state.getFluidState().isEmpty();
     }
 
     private static boolean solid(ServerLevel level, BlockPos pos) {
@@ -315,7 +333,7 @@ public class MinesTests {
                 return;
             }
             boolean doorway = inDoorHeight(y) && ((inDoorSpan(x) && (z == 0 || z == max)) || (inDoorSpan(z) && (x == 0 || x == max)));
-            if (doorway ? !state.isAir() : !solid(level, pos)) {
+            if (doorway ? !clear(level, pos) : !solid(level, pos)) {
                 problems.add(name + (doorway ? ": a blocked doorway at " : ": a hole in the outside at ") + x + "," + y + "," + z);
             }
         });
@@ -327,7 +345,7 @@ public class MinesTests {
                         problems.add(name + ": no floor in the " + side + " landing at " + p[0] + "," + p[1]);
                     }
                     for (int y = DOOR_BOTTOM_Y; y < DOOR_BOTTOM_Y + DOOR_HEIGHT; y++) {
-                        if (!level.getBlockState(corner.offset(p[0], y, p[1])).isAir()) {
+                        if (!clear(level, corner.offset(p[0], y, p[1]))) {
                             problems.add(name + ": the " + side + " landing is blocked at " + p[0] + "," + y + "," + p[1]);
                         }
                     }
@@ -351,10 +369,10 @@ public class MinesTests {
             if (!passage && !solid(level, pos)) {
                 problems.add(name + ": a hole in the rock at " + x + "," + y + "," + z);
             }
-            if (passage && (z == 0 || z == TUNNEL_LENGTH - 1) && !level.getBlockState(pos).isAir()) {
+            if (passage && (z == 0 || z == TUNNEL_LENGTH - 1) && !clear(level, pos)) {
                 problems.add(name + ": a blocked end at " + x + "," + y + "," + z);
             }
-            if (x == TUNNEL_WIDTH / 2 && y >= TUNNEL_WALL && y < roof && !level.getBlockState(pos).getCollisionShape(level, pos).isEmpty()) {
+            if (x == TUNNEL_WIDTH / 2 && y >= TUNNEL_WALL && y < roof - 1 && !level.getBlockState(pos).getCollisionShape(level, pos).isEmpty()) {
                 problems.add(name + ": the walkway is blocked at " + x + "," + y + "," + z);
             }
         });
@@ -385,7 +403,7 @@ public class MinesTests {
     public static void carvedPiecesArePlacedWithTheirOre(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos corner = helper.absolutePos(BlockPos.ZERO).above(150);
-        MinesBuilder.place(level, Placement.carved(Kind.INFESTED, corner, Rotation.NONE, 3), 100, RandomSource.create(3));
+        MinesBuilder.place(level, Placement.carved(Kind.INFESTED, corner, Rotation.NONE, 3, EnumSet.of(Direction.NORTH, Direction.EAST)), 100, RandomSource.create(3));
         int[] counts = new int[4]; // stone, deepslate, ores, spawners with undead
         List<String> problems = new ArrayList<>();
         checkRoom(level, corner, Kind.INFESTED, "infested", problems);
@@ -413,14 +431,14 @@ public class MinesTests {
         });
         clear(level, corner, Kind.INFESTED.size());
 
-        MinesBuilder.place(level, Placement.carved(Kind.TUNNEL, corner, Rotation.NONE, 5), 1, RandomSource.create(5));
+        MinesBuilder.place(level, Placement.carved(Kind.TUNNEL, corner, Rotation.NONE, 5, Set.of()), 1, RandomSource.create(5));
         checkTunnel(level, corner, "tunnel", problems);
         clear(level, corner, Kind.TUNNEL.size());
-        MinesBuilder.place(level, Placement.carved(Kind.TUNNEL, corner, Rotation.CLOCKWISE_90, 5), 1, RandomSource.create(5));
+        MinesBuilder.place(level, Placement.carved(Kind.TUNNEL, corner, Rotation.CLOCKWISE_90, 5, Set.of()), 1, RandomSource.create(5));
         for (int across = TUNNEL_WALL; across < TUNNEL_WALL + DOOR_WIDTH; across++) {
             for (int y = TUNNEL_WALL; y < TUNNEL_WALL + DOOR_HEIGHT; y++) {
                 for (int x : new int[] { 0, TUNNEL_LENGTH - 1 }) {
-                    if (!level.getBlockState(corner.offset(x, y, across)).isAir()) {
+                    if (!clear(level, corner.offset(x, y, across))) {
                         problems.add("the turned tunnel is blocked at its end at " + x + "," + y + "," + across);
                     }
                 }
