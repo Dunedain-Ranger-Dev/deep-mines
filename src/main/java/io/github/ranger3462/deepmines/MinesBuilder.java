@@ -6,6 +6,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -49,15 +50,16 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
 public final class MinesBuilder {
     /**
      * One piece to place, by the minimum corner of the space it fills once turned: a saved piece ({@code template}), or
-     * with no template, one carved from {@code seed}.
+     * with no template, one carved from {@code seed}. A carved room's {@code openings} are its sides with a corridor.
      */
-    public record Placement(@Nullable ResourceLocation template, Kind kind, BlockPos targetMin, Rotation rotation, Mirror mirror, long seed) {
+    public record Placement(@Nullable ResourceLocation template, Kind kind, BlockPos targetMin, Rotation rotation, Mirror mirror, long seed,
+            Set<Direction> openings) {
         public static Placement saved(ResourceLocation template, Kind kind, BlockPos targetMin, Rotation rotation, Mirror mirror) {
-            return new Placement(template, kind, targetMin, rotation, mirror, 0);
+            return new Placement(template, kind, targetMin, rotation, mirror, 0, Set.of());
         }
 
-        public static Placement carved(Kind kind, BlockPos targetMin, Rotation rotation, long seed) {
-            return new Placement(null, kind, targetMin, rotation, Mirror.NONE, seed);
+        public static Placement carved(Kind kind, BlockPos targetMin, Rotation rotation, long seed, Set<Direction> openings) {
+            return new Placement(null, kind, targetMin, rotation, Mirror.NONE, seed, openings);
         }
 
         public boolean isCarved() {
@@ -99,13 +101,14 @@ public final class MinesBuilder {
      * A room or corridor of a kind: usually carved, from a seed off {@code random}; sometimes (as often as the config
      * says) a hand-built one, if there are any of the kind.
      */
-    private static Placement roomOrCorridor(Kind kind, MinesPieces pieces, BlockPos min, Rotation rotation, Mirror mirror, RandomSource random) {
+    private static Placement roomOrCorridor(Kind kind, MinesPieces pieces, BlockPos min, Rotation rotation, Mirror mirror, Set<Direction> openings,
+            RandomSource random) {
         long seed = random.nextLong();
         if (!pieces.pool(kind).isEmpty() && random.nextInt(100) < Config.HAND_BUILT.get()) {
             return Placement.saved(pieces.pick(kind, random), kind, min, rotation, mirror);
         }
         // Carved rooms are made for their spot, so they're never turned; corridors are carved along z, and turned to run along x.
-        return Placement.carved(kind, min, kind == Kind.TUNNEL ? rotation : Rotation.NONE, seed);
+        return Placement.carved(kind, min, kind == Kind.TUNNEL ? rotation : Rotation.NONE, seed, openings);
     }
 
     /** The minimum corner of a cell's room, for a floor whose first room's floor is centered on {@code center}. */
@@ -124,7 +127,13 @@ public final class MinesBuilder {
                 .toList();
         for (Room room : rooms) {
             Kind kind = kinds.getOrDefault(room.cell(), Kind.COMMON);
-            placements.add(roomOrCorridor(kind, pieces, roomMin(center, room.cell()), room.rotation(), room.mirror(), random));
+            Set<Direction> openings = EnumSet.noneOf(Direction.class);
+            for (Direction side : Direction.Plane.HORIZONTAL) {
+                if (layout.connected(room.cell(), side)) {
+                    openings.add(side);
+                }
+            }
+            placements.add(roomOrCorridor(kind, pieces, roomMin(center, room.cell()), room.rotation(), room.mirror(), openings, random));
         }
 
         for (Connection connection : layout.connections().stream()
@@ -135,9 +144,9 @@ public final class MinesBuilder {
             // Corridors run along z; turn them a quarter for east-west ones. Either way one starts just outside the
             // room, centered on its doorway.
             if (connection.alongX()) {
-                placements.add(roomOrCorridor(Kind.TUNNEL, pieces, fromMin.offset(ROOM_SIZE, TUNNEL_Y, TUNNEL_START), Rotation.CLOCKWISE_90, Mirror.NONE, random));
+                placements.add(roomOrCorridor(Kind.TUNNEL, pieces, fromMin.offset(ROOM_SIZE, TUNNEL_Y, TUNNEL_START), Rotation.CLOCKWISE_90, Mirror.NONE, Set.of(), random));
             } else {
-                placements.add(roomOrCorridor(Kind.TUNNEL, pieces, fromMin.offset(TUNNEL_START, TUNNEL_Y, ROOM_SIZE), Rotation.NONE, Mirror.NONE, random));
+                placements.add(roomOrCorridor(Kind.TUNNEL, pieces, fromMin.offset(TUNNEL_START, TUNNEL_Y, ROOM_SIZE), Rotation.NONE, Mirror.NONE, Set.of(), random));
             }
         }
 
@@ -171,7 +180,7 @@ public final class MinesBuilder {
         Set<BlockPos> spots = new HashSet<>();
         List<BlockPos> spawners = new ArrayList<>();
         if (placement.isCarved()) {
-            MinesGrid.Placed placed = RoomCarver.carve(placement.kind(), placement.seed()).grid()
+            MinesGrid.Placed placed = RoomCarver.carve(placement.kind(), placement.seed(), placement.openings()).grid()
                     .place(level, placement.targetMin(), placement.rotation(), deep ? MinesBuilder::deepslate : state -> state);
             spots.addAll(placed.oreSpots());
             spawners.addAll(placed.spawners());

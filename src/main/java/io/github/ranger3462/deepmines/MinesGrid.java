@@ -89,8 +89,13 @@ public final class MinesGrid {
         return x > 0 && y > 0 && z > 0 && x < sx - 1 && y < sy - 1 && z < sz - 1;
     }
 
-    private int index(int x, int y, int z) {
+    public int index(int x, int y, int z) {
         return (y * sz + z) * sx + x;
+    }
+
+    /** The {@code {x, y, z}} of an {@link #index}. */
+    public int[] position(int index) {
+        return new int[] { index % sx, index / (sx * sz), (index / sx) % sz };
     }
 
     public byte type(int x, int y, int z) {
@@ -172,6 +177,17 @@ public final class MinesGrid {
             return true;
         }
         return t == FIXED && (climbable(x, y, z) || block(x, y, z).getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO).isEmpty());
+    }
+
+    /** Whether something stands firm here: anything that isn't {@link #passable} (out of the grid is rock). */
+    public boolean solid(int x, int y, int z) {
+        return !passable(x, y, z);
+    }
+
+    /** Whether a spot is open and dry: air, or something with nothing to bump into (a rail, say). */
+    public boolean clear(int x, int y, int z) {
+        byte t = type(x, y, z);
+        return t == AIR || (t == FIXED && passable(x, y, z) && !climbable(x, y, z));
     }
 
     public boolean climbable(int x, int y, int z) {

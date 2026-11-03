@@ -6,19 +6,24 @@ import static io.github.ranger3462.deepmines.MinesSpec.*;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 
 import io.github.ranger3462.deepmines.MinesPieces.Kind;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LadderBlock;
+import net.minecraft.world.level.block.LanternBlock;
 import net.minecraft.world.level.block.MultifaceBlock;
 import net.minecraft.world.level.block.RailBlock;
 import net.minecraft.world.level.block.RotatedPillarBlock;
-import net.minecraft.world.level.block.WallTorchBlock;
+import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.block.state.properties.RailShape;
 
 /**
@@ -34,8 +39,11 @@ import net.minecraft.world.level.block.state.properties.RailShape;
  * <li>Infested rooms: a cave with spawners, bones and cobwebs, and the usual amount of ore.</li>
  * <li>Corridors: low, timbered mineshafts in the style of YUNG's Better Mineshafts, with a little ore.</li>
  * </ul>
- * Every room is checked against the rules a floor relies on ({@link #problems}): if one breaks them, it's carved again
- * from the next seed, and as a last resort plank walkways are laid from each doorway to the middle.
+ * A room's rail line runs in from each doorway with a corridor to the middle, so following the rails leads on and a
+ * doorway without them is a dead end. Every vein of ore shows somewhere, or touches one that does, so there's always
+ * something to see that's worth digging towards. Every room is checked against the rules a floor relies on
+ * ({@link #problems}): if one breaks them, it's carved again from the next seed, and as a last resort plank walkways
+ * are laid from each doorway to the middle.
  */
 public final class RoomCarver {
     private static final int MAX = ROOM_SIZE - 1;
@@ -50,22 +58,26 @@ public final class RoomCarver {
 
     private RoomCarver() {}
 
-    /** Carves a room or corridor of a kind from a seed: the same seed always gives the same one. */
-    public static Carved carve(Kind kind, long seed) {
+    /**
+     * Carves a room or corridor of a kind from a seed: the same seed always gives the same one. {@code openings} are
+     * the sides of a room with a corridor; its rail line runs in from each of them (corridors ignore it).
+     */
+    public static Carved carve(Kind kind, long seed, Set<Direction> openings) {
         MinesGrid grid = null;
         for (int t = 0; t < TRIES; t++) {
-            grid = carveOnce(kind, new Random(seed + t * 0x9E3779B97F4A7C15L));
+            grid = carveOnce(kind, new Random(seed + t * 0x9E3779B97F4A7C15L), openings);
             if (problems(grid, kind).isEmpty()) {
                 return new Carved(grid, t + 1, false);
             }
         }
         walkways(grid);
+        finish(grid, new Random(seed), openings);
         return new Carved(grid, TRIES, true);
     }
 
     /** One try at carving: may break the rules. */
-    public static MinesGrid carveOnce(Kind kind, Random random) {
-        return switch (kind) {
+    public static MinesGrid carveOnce(Kind kind, Random random, Set<Direction> openings) {
+        MinesGrid g = switch (kind) {
             case COMMON -> common(random, random.nextBoolean());
             case QUARRY -> quarry(random);
             case FLOODED -> flooded(random);
@@ -73,6 +85,21 @@ public final class RoomCarver {
             case TUNNEL -> mineshaft(random, random.nextInt(3) == 0);
             default -> throw new IllegalArgumentException("Mines " + kind + " pieces aren't carved");
         };
+        if (kind == Kind.TUNNEL) {
+            dropUnsupportedRails(g);
+            showOre(g, random);
+        } else {
+            finishRoom(g);
+            finish(g, random, openings);
+        }
+        return g;
+    }
+
+    /** The last of a room: its rail line, no rails left hanging, and every vein of ore shown or leading to one that is. */
+    private static void finish(MinesGrid g, Random random, Set<Direction> openings) {
+        railLine(g, openings);
+        dropUnsupportedRails(g);
+        showOre(g, random);
     }
 
     // --- Rooms ---
@@ -225,6 +252,261 @@ public final class RoomCarver {
         finishRoom(g);
     }
 
+    // --- The rail line ---
+
+    /**
+     * The room's rail line: from each doorway with a corridor, straight in to the middle along the doorway's center,
+     * where the lines meet (on a curve, if two meet at a corner). Its bed is laid in planks wherever there's no floor
+     * (a trestle over a pit or pool), with room to walk beside it.
+     */
+    private static void railLine(MinesGrid g, Set<Direction> openings) {
+        if (openings.isEmpty()) {
+            return;
+        }
+        BlockState planks = Blocks.SPRUCE_PLANKS.defaultBlockState();
+        for (Direction side : openings) {
+            RailShape shape = side.getAxis() == Direction.Axis.Z ? RailShape.NORTH_SOUTH : RailShape.EAST_WEST;
+            for (int depth = 0; depth <= MID; depth++) {
+                for (int across = MID - 1; across <= MID + 1; across++) {
+                    int[] p = fromWall(side, across, depth);
+                    if (depth > 0 && g.passable(p[0], WALK_Y, p[1])) {
+                        g.put(p[0], WALK_Y, p[1], planks);
+                    }
+                    for (int y = WALK_Y + 1; y <= WALK_Y + 3 && depth > 0; y++) {
+                        g.setType(p[0], y, p[1], AIR);
+                    }
+                }
+                int[] p = fromWall(side, MID, depth);
+                g.put(p[0], WALK_Y + 1, p[1], Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, shape));
+            }
+        }
+        g.put(MID, WALK_Y + 1, MID, Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, hub(openings)));
+    }
+
+    /** How the rail in the middle of a room lies, for the sides its lines come in from. */
+    private static RailShape hub(Set<Direction> openings) {
+        boolean n = openings.contains(Direction.NORTH);
+        boolean s = openings.contains(Direction.SOUTH);
+        boolean e = openings.contains(Direction.EAST);
+        boolean w = openings.contains(Direction.WEST);
+        if ((n || s) && !(e || w) || (n && s)) {
+            return RailShape.NORTH_SOUTH;
+        } else if (!(n || s) || (e && w)) {
+            return RailShape.EAST_WEST;
+        }
+        return n ? (e ? RailShape.NORTH_EAST : RailShape.NORTH_WEST) : (e ? RailShape.SOUTH_EAST : RailShape.SOUTH_WEST);
+    }
+
+    /** Takes out any rail with nothing solid under it. */
+    private static void dropUnsupportedRails(MinesGrid g) {
+        for (int x = 0; x < g.sx; x++) {
+            for (int y = 0; y < g.sy; y++) {
+                for (int z = 0; z < g.sz; z++) {
+                    if (g.block(x, y, z).is(Blocks.RAIL) && !g.solid(x, y - 1, z)) {
+                        g.setType(x, y, z, AIR);
+                    }
+                }
+            }
+        }
+    }
+
+    // --- Ore that shows ---
+
+    /** How far a buried vein may run on to show itself; one farther in moves to the rock face instead. */
+    private static final int LEAD = 6;
+
+    /** A vein of ore: spots of it touching face to face (which become one ore when the floor is built). */
+    private static List<int[]> vein(MinesGrid g, boolean[] seen, int x, int y, int z) {
+        List<int[]> vein = new ArrayList<>();
+        Deque<int[]> queue = new ArrayDeque<>();
+        seen[g.index(x, y, z)] = true;
+        queue.add(new int[] { x, y, z });
+        while (!queue.isEmpty()) {
+            int[] c = queue.poll();
+            vein.add(c);
+            for (Direction d : Direction.values()) {
+                int nx = c[0] + d.getStepX();
+                int ny = c[1] + d.getStepY();
+                int nz = c[2] + d.getStepZ();
+                if (g.type(nx, ny, nz) == ORE && !seen[g.index(nx, ny, nz)]) {
+                    seen[g.index(nx, ny, nz)] = true;
+                    queue.add(new int[] { nx, ny, nz });
+                }
+            }
+        }
+        return vein;
+    }
+
+    private static List<List<int[]>> veins(MinesGrid g) {
+        List<List<int[]>> veins = new ArrayList<>();
+        boolean[] seen = new boolean[g.sx * g.sy * g.sz];
+        for (int x = 0; x < g.sx; x++) {
+            for (int y = 0; y < g.sy; y++) {
+                for (int z = 0; z < g.sz; z++) {
+                    if (g.type(x, y, z) == ORE && !seen[g.index(x, y, z)]) {
+                        veins.add(vein(g, seen, x, y, z));
+                    }
+                }
+            }
+        }
+        return veins;
+    }
+
+    /** Whether a spot of rock has open space beside it, so it can be seen. */
+    private static boolean shows(MinesGrid g, int x, int y, int z) {
+        for (Direction d : Direction.values()) {
+            if (g.passable(x + d.getStepX(), y + d.getStepY(), z + d.getStepZ())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether a spot touches (even only at an edge or corner) a spot already marked. */
+    private static boolean touches(MinesGrid g, boolean[] marked, int x, int y, int z) {
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    if (g.in(x + dx, y + dy, z + dz) && marked[g.index(x + dx, y + dy, z + dz)]) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Which veins can be found: those that show, and those touching (even at a corner) one that can be found. The rest
+     * are buried out of sight, and nothing would lead a player to them.
+     */
+    private static boolean[] found(MinesGrid g, List<List<int[]>> veins, List<List<int[]>> buried) {
+        boolean[] found = new boolean[g.sx * g.sy * g.sz];
+        List<List<int[]>> left = new ArrayList<>();
+        for (List<int[]> vein : veins) {
+            if (vein.stream().anyMatch(c -> shows(g, c[0], c[1], c[2]))) {
+                vein.forEach(c -> found[g.index(c[0], c[1], c[2])] = true);
+            } else {
+                left.add(vein);
+            }
+        }
+        for (boolean more = true; more;) {
+            more = false;
+            for (var it = left.iterator(); it.hasNext();) {
+                List<int[]> vein = it.next();
+                if (vein.stream().anyMatch(c -> touches(g, found, c[0], c[1], c[2]))) {
+                    vein.forEach(c -> found[g.index(c[0], c[1], c[2])] = true);
+                    it.remove();
+                    more = true;
+                }
+            }
+        }
+        buried.addAll(left);
+        return found;
+    }
+
+    /** The veins nothing leads to. */
+    public static List<List<int[]>> buriedVeins(MinesGrid g) {
+        List<List<int[]>> buried = new ArrayList<>();
+        found(g, veins(g), buried);
+        return buried;
+    }
+
+    /**
+     * Makes every vein findable. A buried one near open space or a findable vein runs on through the rock to it (a lead
+     * worth following in); one farther in moves to the rock face, at about the same height, and grows from there.
+     */
+    private static void showOre(MinesGrid g, Random random) {
+        List<List<int[]>> buried = new ArrayList<>();
+        boolean[] found = found(g, veins(g), buried);
+        List<int[]> faces = new ArrayList<>();
+        for (int x = 1; x < g.sx - 1; x++) {
+            for (int y = 1; y < g.sy - 1; y++) {
+                for (int z = 1; z < g.sz - 1; z++) {
+                    if (g.oreable(x, y, z) && shows(g, x, y, z)) {
+                        faces.add(new int[] { x, y, z });
+                    }
+                }
+            }
+        }
+        for (List<int[]> vein : buried) {
+            List<int[]> lead = lead(g, found, vein);
+            if (lead != null) {
+                for (int[] c : lead) {
+                    g.setType(c[0], c[1], c[2], ORE);
+                }
+                vein.forEach(c -> found[g.index(c[0], c[1], c[2])] = true);
+                lead.forEach(c -> found[g.index(c[0], c[1], c[2])] = true);
+                continue;
+            }
+            vein.forEach(c -> g.setType(c[0], c[1], c[2], ROCK));
+            if (faces.isEmpty()) {
+                continue;
+            }
+            int height = vein.get(0)[1];
+            int[] pick = faces.get(random.nextInt(faces.size()));
+            for (int tries = 0; tries < 40 && Math.abs(pick[1] - height) > 6; tries++) {
+                pick = faces.get(random.nextInt(faces.size()));
+            }
+            vein(g, random, pick[0], pick[1], pick[2], vein.size());
+            if (g.type(pick[0], pick[1], pick[2]) == ORE) {
+                // What grew (with anything it ran into) shows now.
+                Deque<int[]> queue = new ArrayDeque<>(List.of(pick));
+                found[g.index(pick[0], pick[1], pick[2])] = true;
+                while (!queue.isEmpty()) {
+                    int[] c = queue.poll();
+                    for (Direction d : Direction.values()) {
+                        int nx = c[0] + d.getStepX();
+                        int ny = c[1] + d.getStepY();
+                        int nz = c[2] + d.getStepZ();
+                        if (g.type(nx, ny, nz) == ORE && !found[g.index(nx, ny, nz)]) {
+                            found[g.index(nx, ny, nz)] = true;
+                            queue.add(new int[] { nx, ny, nz });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * The shortest run of rock (up to {@link #LEAD} long) from a vein to a spot that shows or touches a findable vein,
+     * or null if there's none that close.
+     */
+    private static List<int[]> lead(MinesGrid g, boolean[] found, List<int[]> vein) {
+        Map<Integer, Integer> from = new HashMap<>();
+        Deque<int[]> queue = new ArrayDeque<>();
+        for (int[] c : vein) {
+            from.put(g.index(c[0], c[1], c[2]), g.index(c[0], c[1], c[2]));
+            queue.add(new int[] { c[0], c[1], c[2], 0 });
+        }
+        while (!queue.isEmpty()) {
+            int[] c = queue.poll();
+            if (c[3] >= LEAD) {
+                continue;
+            }
+            for (Direction d : Direction.values()) {
+                int nx = c[0] + d.getStepX();
+                int ny = c[1] + d.getStepY();
+                int nz = c[2] + d.getStepZ();
+                int i = g.index(nx, ny, nz);
+                if (!g.oreable(nx, ny, nz) || from.containsKey(i)) {
+                    continue;
+                }
+                from.put(i, g.index(c[0], c[1], c[2]));
+                if (shows(g, nx, ny, nz) || touches(g, found, nx, ny, nz)) {
+                    List<int[]> lead = new ArrayList<>();
+                    for (int at = i; at != from.get(at); at = from.get(at)) {
+                        lead.add(g.position(at));
+                    }
+                    return lead;
+                }
+                queue.add(new int[] { nx, ny, nz, c[3] + 1 });
+            }
+        }
+        return null;
+    }
+
     // --- Ore ---
 
     /** Grows a vein of up to {@code size} ore spots from a starting spot, through rock only. */
@@ -328,8 +610,9 @@ public final class RoomCarver {
             return;
         }
         BlockState rail = Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, alongX ? RailShape.EAST_WEST : RailShape.NORTH_SOUTH);
-        BlockState leg = Blocks.OAK_LOG.defaultBlockState();
-        BlockState beam = Blocks.OAK_LOG.defaultBlockState().setValue(RotatedPillarBlock.AXIS, alongX ? Direction.Axis.Z : Direction.Axis.X);
+        BlockState foot = Blocks.BARREL.defaultBlockState();
+        BlockState leg = Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState();
+        BlockState beam = Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState().setValue(RotatedPillarBlock.AXIS, alongX ? Direction.Axis.Z : Direction.Axis.X);
         for (int a = start; a != end + dir; a += dir) {
             for (int across = line - 1; across <= line + 1; across++) {
                 int[] p = at(alongX, a, across);
@@ -344,11 +627,11 @@ public final class RoomCarver {
             int step = (a - start) * dir;
             boolean nearEnd = (end - a) * dir < 2;
             if (step % 3 == 1 && !nearEnd) {
-                // A support: legs either side, a beam over. Some have rotted away.
+                // A support: legs on barrels either side, a beam over. Some have rotted away.
                 if (random.nextInt(5) != 0) {
                     for (int across : new int[] { line - 1, line + 1 }) {
                         int[] p = at(alongX, a, across);
-                        g.put(p[0], WALK_Y + 1, p[1], leg);
+                        g.put(p[0], WALK_Y + 1, p[1], foot);
                         if (random.nextInt(4) != 0) {
                             g.put(p[0], WALK_Y + 2, p[1], leg);
                         }
@@ -389,15 +672,16 @@ public final class RoomCarver {
             for (int y = WALK_Y - 4; y <= WALK_Y + 3; y++) {
                 g.put(chain[0], y, chain[1], Blocks.CHAIN);
             }
-            // A short drive on from the bottom, beside the ladder, and the ore it was after.
-            for (int a = end + dir; a != end + dir * 4; a += dir) {
+            // A short drive on from the bottom, beside the ladder, into the pocket of ore it was after.
+            int reach = between(random, 3, 5);
+            for (int a = end + dir; a != end + dir * reach; a += dir) {
                 int[] p = at(alongX, a, line + 1);
                 g.carve(p[0], bottom + 1, p[1]);
                 g.carve(p[0], bottom + 2, p[1]);
             }
-            int[] past = at(alongX, end + dir * 6, line + 1);
-            vein(g, random, past[0], bottom + 1, past[1], between(random, 10, 14));
-            vein(g, random, ladderAt[0], bottom - 2, ladderAt[1], between(random, 6, 10));
+            int[] pocket = at(alongX, end + dir * (reach + 1), line + 1);
+            stope(g, random, pocket[0], bottom + 1, pocket[1]);
+            vein(g, random, ladderAt[0], bottom, ladderAt[1], between(random, 6, 10));
         } else {
             // A raise: dug up from the drift's roof, with a ladder up the face.
             int top = between(random, 29, 33);
@@ -409,10 +693,21 @@ public final class RoomCarver {
             for (int y = WALK_Y + 1; y <= top; y++) {
                 g.put(ladderAt[0], y, ladderAt[1], ladder);
             }
-            int[] over = at(alongX, end - dir, line);
-            vein(g, random, over[0], top + 2, over[1], between(random, 10, 14));
-            int[] beside = at(alongX, end + dir * 2, line + 1);
-            vein(g, random, beside[0], top - 1, beside[1], between(random, 6, 10));
+            // It broke into a pocket of ore at the top.
+            int[] over = at(alongX, end, line);
+            stope(g, random, over[0], top + 1, over[1]);
+        }
+    }
+
+    /** A small pocket worked out of the rock, 3 across and 2 high, with veins showing in its walls and roof. */
+    private static void stope(MinesGrid g, Random random, int cx, int cy, int cz) {
+        forBox(cx - 1, cy, cz - 1, cx + 1, cy + 1, cz + 1, g::carve);
+        for (int i = 0, veins = between(random, 2, 3); i < veins; i++) {
+            Direction d = Direction.values()[1 + random.nextInt(5)]; // Up or a side, never the floor.
+            int x = cx + d.getStepX() * 2 + (d.getAxis() == Direction.Axis.X ? 0 : between(random, -1, 1));
+            int y = cy + (d == Direction.UP ? 2 : random.nextInt(2));
+            int z = cz + d.getStepZ() * 2 + (d.getAxis() == Direction.Axis.Z ? 0 : between(random, -1, 1));
+            vein(g, random, x, y, z, between(random, 6, 10));
         }
     }
 
@@ -482,7 +777,6 @@ public final class RoomCarver {
             veins(g, random, other, WALK_Y + 1, TOP - 2, 4, 9);
         }
         decorate(g, random, 8);
-        finishRoom(g);
         return g;
     }
 
@@ -510,9 +804,9 @@ public final class RoomCarver {
                     }
                 }
             }
-            // A ladder down each step, on the east side, against the step.
+            // A ladder down each step, on the east side, against the step, beside where the rail line crosses.
             for (int y = floor + 1; y <= WALK_Y - 3 * k; y++) {
-                g.put(MID + s, y, MID, ladder);
+                g.put(MID + s, y, MID + 3, ladder);
             }
         }
         // A ledge round the rim, so the ways in all meet without going down into the pit.
@@ -541,11 +835,10 @@ public final class RoomCarver {
                 }
             }
         }
-        for (int y = WALK_Y - 8; g.air(MID, y, MID); y++) {
-            g.put(MID, y, MID, Blocks.CHAIN);
+        for (int y = WALK_Y - 8; y < WALK_Y && g.air(MID + 3, y, MID - 3); y++) {
+            g.put(MID + 3, y, MID - 3, Blocks.CHAIN);
         }
         decorate(g, random, 10);
-        finishRoom(g);
         return g;
     }
 
@@ -646,7 +939,6 @@ public final class RoomCarver {
             }
         }
         decorate(g, random, 10);
-        finishRoom(g);
         return g;
     }
 
@@ -702,16 +994,16 @@ public final class RoomCarver {
             }
         }
         decorate(g, random, 4);
-        finishRoom(g);
         return g;
     }
 
     // --- Corridors ---
 
     /**
-     * A low timbered mineshaft: rock two thick around a doorway-sized passage with a plank floor, and every 4 to 6
-     * blocks a set of supports (log legs and a beam overhead that leaves 3 blocks to walk under) with a torch on one
-     * leg. A few small veins show in the walls. A caved-in one has a fall of rubble along one side somewhere along it.
+     * A low timbered mineshaft: rock two thick around a doorway-sized passage with a plank floor and a rail line down
+     * the middle, and every 4 to 6 blocks a set of supports (stripped spruce legs standing on barrels, a beam over that
+     * leaves 3 blocks to walk under, stair braces in its corners) with a lantern hung from the middle of the beam. A few
+     * small veins show in the walls. A caved-in one has a fall of rubble along one side somewhere along it.
      */
     private static MinesGrid mineshaft(Random random, boolean caved) {
         MinesGrid g = new MinesGrid(TUNNEL_WIDTH, TUNNEL_HEIGHT, TUNNEL_LENGTH, random, 3);
@@ -737,31 +1029,34 @@ public final class RoomCarver {
             vein(g, random, x, y, z, between(random, 2, 4));
         }
 
-        BlockState leg = Blocks.OAK_LOG.defaultBlockState();
-        BlockState beam = Blocks.OAK_LOG.defaultBlockState().setValue(RotatedPillarBlock.AXIS, Direction.Axis.X);
+        BlockState foot = Blocks.BARREL.defaultBlockState();
+        BlockState leg = Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState();
+        BlockState beam = Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState().setValue(RotatedPillarBlock.AXIS, Direction.Axis.X);
+        BlockState braceWest = Blocks.SPRUCE_STAIRS.defaultBlockState().setValue(StairBlock.FACING, Direction.WEST).setValue(StairBlock.HALF, Half.TOP);
+        BlockState braceEast = braceWest.setValue(StairBlock.FACING, Direction.EAST);
+        BlockState lantern = Blocks.LANTERN.defaultBlockState().setValue(LanternBlock.HANGING, true);
         BlockState rail = Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, RailShape.NORTH_SOUTH);
-        boolean torchLeft = random.nextBoolean();
         List<Integer> supports = new ArrayList<>();
         for (int z = between(random, 1, 3); z < TUNNEL_LENGTH - 1; z += between(random, 4, 6)) {
             supports.add(z);
-            for (int y = TUNNEL_WALL; y < roof; y++) {
+            g.put(lo, TUNNEL_WALL, z, foot);
+            g.put(hi, TUNNEL_WALL, z, foot);
+            for (int y = TUNNEL_WALL + 1; y < roof; y++) {
                 g.put(lo, y, z, leg);
                 g.put(hi, y, z, leg);
             }
             for (int x = lo; x <= hi; x++) {
                 g.put(x, roof, z, beam);
             }
-            // A torch on the side of one leg, facing along the corridor: beside the walkway, never in it.
-            if (random.nextInt(5) != 0) {
-                g.put(torchLeft ? lo : hi, TUNNEL_WALL + 1, z + 1, Blocks.WALL_TORCH.defaultBlockState().setValue(WallTorchBlock.FACING, Direction.SOUTH));
+            g.put(lo + 1, roof - 1, z, braceWest);
+            g.put(hi - 1, roof - 1, z, braceEast);
+            if (random.nextInt(4) != 0) {
+                g.put(MID_TUNNEL, roof - 1, z, lantern);
             }
-            torchLeft = !torchLeft;
         }
         for (int z = 0; z < TUNNEL_LENGTH; z++) {
-            boolean clear = !supports.contains(z) && !supports.contains(z - 1);
-            if (random.nextInt(5) != 0) {
-                g.put(MID_TUNNEL, TUNNEL_WALL, z, rail);
-            }
+            boolean clear = !supports.contains(z);
+            g.put(MID_TUNNEL, TUNNEL_WALL, z, rail);
             for (int x : new int[] { lo, hi }) {
                 if (clear && random.nextInt(4) == 0) {
                     g.put(x, roof, z, Blocks.COBWEB);
@@ -789,7 +1084,7 @@ public final class RoomCarver {
             }
         }
         sealOutside(g);
-        // The ends stay open to the doorways.
+        // The ends stay open to the doorways, and the rails run on into the rooms.
         for (int x = lo; x <= hi; x++) {
             for (int y = TUNNEL_WALL; y <= roof; y++) {
                 for (int z : new int[] { 0, TUNNEL_LENGTH - 1 }) {
@@ -797,18 +1092,34 @@ public final class RoomCarver {
                 }
             }
         }
+        g.put(MID_TUNNEL, TUNNEL_WALL, 0, rail);
+        g.put(MID_TUNNEL, TUNNEL_WALL, TUNNEL_LENGTH - 1, rail);
         return g;
     }
 
     // --- The rules ---
 
     /**
-     * What's wrong with a carved room or corridor, if anything. Rooms: solid all round but their doorways, a landing
-     * inside each, a way to walk from every doorway to every other, water only in flooded rooms, spawners only in
-     * infested ones. Corridors: solid all round, open at both ends, with a clear walkway.
+     * What's wrong with a carved room or corridor, if anything. Both: every vein of ore shows, or touches one that
+     * does, and every rail has something under it. Rooms: solid all round but their doorways, a landing inside each, a
+     * way to walk from every doorway to every other, water only in flooded rooms, spawners only in infested ones.
+     * Corridors: solid all round, open at both ends, with a clear walkway.
      */
     public static List<String> problems(MinesGrid g, Kind kind) {
         List<String> problems = new ArrayList<>();
+        for (List<int[]> vein : buriedVeins(g)) {
+            int[] c = vein.get(0);
+            problems.add("a buried vein of " + vein.size() + " at " + c[0] + "," + c[1] + "," + c[2]);
+        }
+        for (int x = 0; x < g.sx; x++) {
+            for (int y = 0; y < g.sy; y++) {
+                for (int z = 0; z < g.sz; z++) {
+                    if (g.block(x, y, z).is(Blocks.RAIL) && !g.solid(x, y - 1, z)) {
+                        problems.add("a rail with nothing under it at " + x + "," + y + "," + z);
+                    }
+                }
+            }
+        }
         if (kind == Kind.TUNNEL) {
             tunnelProblems(g, problems);
             return problems;
@@ -820,7 +1131,7 @@ public final class RoomCarver {
                         continue;
                     }
                     boolean doorway = inDoorHeight(y) && ((inDoorSpan(x) && (z == 0 || z == MAX)) || (inDoorSpan(z) && (x == 0 || x == MAX)));
-                    if (doorway ? !g.air(x, y, z) : !g.rock(x, y, z)) {
+                    if (doorway ? !g.clear(x, y, z) : !g.rock(x, y, z)) {
                         problems.add((doorway ? "a blocked doorway at " : "a hole in the outside at ") + x + "," + y + "," + z);
                     }
                 }
@@ -834,7 +1145,7 @@ public final class RoomCarver {
                         problems.add("no floor in the " + side + " landing at " + p[0] + "," + p[1]);
                     }
                     for (int y = DOOR_BOTTOM_Y; y < DOOR_BOTTOM_Y + DOOR_HEIGHT; y++) {
-                        if (!g.air(p[0], y, p[1])) {
+                        if (!g.clear(p[0], y, p[1])) {
                             problems.add("the " + side + " landing is blocked at " + p[0] + "," + y + "," + p[1]);
                         }
                     }
@@ -872,10 +1183,11 @@ public final class RoomCarver {
                     if (!passage && (g.open(x, y, z) || (g.type(x, y, z) == FIXED && g.passable(x, y, z)))) {
                         problems.add("a hole in the rock at " + x + "," + y + "," + z);
                     }
-                    if (passage && (z == 0 || z == g.sz - 1) && !g.air(x, y, z)) {
+                    if (passage && (z == 0 || z == g.sz - 1) && !g.clear(x, y, z)) {
                         problems.add("a blocked end at " + x + "," + y + "," + z);
                     }
-                    if (x == MID_TUNNEL && y >= TUNNEL_WALL && y < roof && !g.passable(x, y, z)) {
+                    // Two blocks clear to walk down the middle; the lanterns hang over it.
+                    if (x == MID_TUNNEL && y >= TUNNEL_WALL && y < roof - 1 && !g.passable(x, y, z)) {
                         problems.add("the walkway is blocked at " + x + "," + y + "," + z);
                     }
                 }
