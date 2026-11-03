@@ -20,8 +20,10 @@ A living space where players go to gather resources on a more frequent schedule 
   (`MinesBuilder`) places their own, bigger pieces.
 - **The start floor.** Floor 0, the same in every Mines: one dwarven hall where the portal brings players in, with a
   dais in the middle for the dwarf who'll give out quests, workshops along the walls, a ladder down to floor 1 and a
-  ladder up back out to wherever they came in from. (Custom Portal API still makes its arrival portal in the caves
-  below the floors, but no one is left there.)
+  ladder up back out to wherever they came in from. It's the Mines' lobby, built with the world: when the server
+  starts, if it isn't there yet (a new world, or just after a reset), so no one waits on it. Arriving on any floor
+  starts the floor below it building, so it's likely ready by the time anyone takes the ladder down. (Custom Portal
+  API still makes its arrival portal in the caves below the floors, but no one is left there.)
 - **Floors.** 100 of them below the start floor. Each has more rooms the deeper it is (3 to 5 down to floor 25, 6
   to 9 down to 50, 10 to 15 down to 75, then 16 to 25) joined by corridors, then a ladder down to the next. The deeper the floor, the better its ore (see [Ore by floor](#ore-by-floor)).
   - **Decided (MINE-14):** floors sit side by side, each in its own 1024-block stretch of the Mines east of the last,
@@ -40,14 +42,17 @@ A living space where players go to gather resources on a more frequent schedule 
   doorway is a landing (solid floor, clear air) so a corridor always leads somewhere to stand. Rooms and corridors are
   carved fresh when a floor is built, each from its own seed (`RoomCarver`), so no two are alike. The kinds (how often
   each comes up is a setting, a weight; a floor's first room is always common). A cave's floor rises and falls up to
-  3 blocks, but stays level along the rail line. Its walls, roof and floor are worn into bulges and hollows by 3D
+  3 blocks, but stays level along the rail line. A rail line runs on a bed of planks 3 wide, from each doorway with a
+  corridor to a wooden junction in the middle (a plank platform 7 across with a lantern on a post at each corner),
+  and on a trestle over a pit or pool. A cave's walls, roof and floor are worn into bulges and hollows by 3D
   noise, so they aren't straight lines, and its roof is smoothed of notches and slots. Ore is kept sparse: about 200
   blocks in a common room, 230 flooded, 310 vein, 340 quarry and 390 infested:
   - `common_` (50): the usual amount of ore. Half are caves: "dig down" ones have it mostly under the cave's floor,
     "dig up" ones (with lower caves) mostly overhead, and old abandoned drifts lead off the cave towards veins and end
     in a shaft sunk or raised towards more, showing where to dig. The other half are old workings laid out like a vein
     room's, with ore of every kind in ordinary veins.
-  - `quarry_` (15): a stepped open pit, packed with ore around its walls. Its floor stays flat round the rim.
+  - `quarry_` (15): one open hall out to the room's outer walls, with a flat floor, a domed roof, and a stepped open
+    pit in the middle, packed with ore around its walls.
   - `flooded_` (15): a deep pool, level with the floor, to dive into; its ore is around the pool's walls and bottom.
   - `infested_` (20): spawners (zombies and skeletons until MINE-25 picks the Mines' own mobs), bones and cobwebs,
     and the usual amount of ore.
