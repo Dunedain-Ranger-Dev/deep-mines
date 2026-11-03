@@ -42,9 +42,11 @@ A living space where players go to gather resources on a more frequent schedule 
   doorway is a landing (solid floor, clear air) so a corridor always leads somewhere to stand. Rooms and corridors are
   carved fresh when a floor is built, each from its own seed (`RoomCarver`), so no two are alike. The kinds (how often
   each comes up is a setting, a weight; a floor's first room is always common). A cave's floor rises and falls up to
-  3 blocks, but stays level along the rail line. A rail line runs on a bed of planks 3 wide, from each doorway with a
-  corridor to a wooden junction in the middle (a plank platform 7 across with a lantern on a post at each corner),
-  and on a trestle over a pit or pool. A cave's walls, roof and floor are worn into bulges and hollows by 3D
+  3 blocks, but stays level along the rail line. A rail line runs on a bed 3 wide (a trestle over a pit or pool), from
+  each doorway with a corridor to a wooden junction in the middle (a plank platform 7 across, framed in stripped logs,
+  with a lantern on a post at each corner). Every track's bed, in rooms, drifts, galleries and corridors, has a
+  sleeper (a stripped spruce log lying across it) every other block, with old planks between, mostly spruce with some
+  dark oak and oak. Chains only ever hang a lantern from the roof. A cave's walls, roof and floor are worn into bulges and hollows by 3D
   noise, so they aren't straight lines, and its roof is smoothed of notches and slots. Ore is kept sparse: about 200
   blocks in a common room, 230 flooded, 310 vein, 340 quarry and 390 infested:
   - `common_` (50): the usual amount of ore. Half are caves: "dig down" ones have it mostly under the cave's floor,
@@ -52,7 +54,7 @@ A living space where players go to gather resources on a more frequent schedule 
     in a shaft sunk or raised towards more, showing where to dig. The other half are old workings laid out like a vein
     room's, with ore of every kind in ordinary veins.
   - `quarry_` (15): one open hall out to the room's outer walls, with a flat floor, a domed roof, and a stepped open
-    pit in the middle, packed with ore around its walls.
+    pit in the middle, packed with ore around its walls, ringed by a boardwalk 3 wide edged in stripped logs.
   - `flooded_` (15): a deep pool, level with the floor, to dive into; its ore is around the pool's walls and bottom.
   - `infested_` (20): spawners (zombies and skeletons until MINE-25 picks the Mines' own mobs), bones and cobwebs,
     and the usual amount of ore.
