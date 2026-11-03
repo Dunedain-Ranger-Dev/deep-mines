@@ -28,8 +28,13 @@ A living space where players go to gather resources on a more frequent schedule 
     rather than stacked (100 stacked floors would need a dimension about 1,600 blocks tall). The ladder down in a
     floor's farthest room takes players to the next floor's first room, where a ladder up leads back. Ladders stand
     on the landing inside a doorway, a dead-end one if the room has one.
-  - A floor is built the first time someone reaches it, so floors no one gets to cost nothing (a short pause, logged
-    as "Built floor n of the Mines in ... ms").
+  - A floor is built the first time someone reaches it, so floors no one gets to cost nothing. It's built a little
+    each tick (`MinesBuildQueue`, up to 15 ms a tick), so even a 25-room floor doesn't freeze the server: the room
+    players arrive in goes first, and they're sent down once it's done ("Floor n is still being dug out..." until
+    then), then the rest fills in outward, each room after the corridor leading to it. Each piece asks for its chunks
+    a few pieces ahead, so they load (and generate) off the server thread. Logged as "Built floor n of the Mines (r
+    rooms) over ... ms". A floor's seed comes from the world's and the number of resets, so one left half built when
+    the server stopped is built again the same.
 - **Rooms (MINE-15, MINE-36).** 49 x 49 x 40, with the doorways halfway up the walls: every room is a block of rock
   with a cave carved in it at doorway height, rock below to dig down into, and rock above to dig up into. Inside every
   doorway is a landing (solid floor, clear air) so a corridor always leads somewhere to stand. Rooms and corridors are

@@ -10,7 +10,7 @@ A mining dimension for NeoForge 1.21.1 that resets on a schedule, so nobody has 
   Rooms are common (the usual amount of ore, a cave to dig down or up into or old timbered workings), quarries (packed with ore), flooded (a deep pool
   to dive into), infested (spawners) or vein rooms (timbered galleries after very large veins of one ore), and every
   room and corridor is carved fresh, so no two are alike. Floors are
-  built the first time someone reaches them. Around the floors is
+  built the first time someone reaches them, a little each tick so the server doesn't freeze. Around the floors is
   cave terrain (vanilla's caves world type with overworld biomes, plus its water and lava pockets, which YUNG's
   Better Caves needs), until the floors replace it.
 - **Resets:** once `resetDays` days (default 7, in `config/deepmines-common.toml`) have passed, the Mines are wiped

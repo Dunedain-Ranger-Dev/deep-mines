@@ -15,7 +15,8 @@ import net.minecraft.world.level.saveddata.SavedData;
 
 /**
  * Which of the Mines' floors have been built, and where their ladders are. Saved with the level, so a reset (which
- * wipes the Mines' folder) forgets every floor along with it.
+ * wipes the Mines' folder) forgets every floor along with it. Floors still being built are only kept until the server
+ * stops: one left half built is built again, from the start, the next time someone reaches it.
  */
 public class MinesFloorsData extends SavedData {
     private static final String NAME = DeepMines.MODID + "_floors";
@@ -27,6 +28,7 @@ public class MinesFloorsData extends SavedData {
     public record Floor(int number, BlockPos ladderUp, BlockPos ladderDown, BlockPos arrivalFromAbove, BlockPos arrivalFromBelow) {}
 
     private final Map<Integer, Floor> floors = new HashMap<>();
+    private final Map<Integer, Floor> building = new HashMap<>();
 
     public static MinesFloorsData get(ServerLevel level) {
         return level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(MinesFloorsData::new, MinesFloorsData::load, null), NAME);
@@ -36,14 +38,26 @@ public class MinesFloorsData extends SavedData {
         return Optional.ofNullable(floors.get(number));
     }
 
+    /** A floor that's built, or being built. */
+    public Optional<Floor> known(int number) {
+        return floor(number).or(() -> Optional.ofNullable(building.get(number)));
+    }
+
     public void put(Floor floor) {
+        building.remove(floor.number());
         floors.put(floor.number(), floor);
         setDirty();
+    }
+
+    /** Notes a floor whose building has started, until it's {@link #put} once done. */
+    public void startBuilding(Floor floor) {
+        building.put(floor.number(), floor);
     }
 
     /** Forgets every floor (for tests; a real reset wipes the saved file). */
     public void clear() {
         floors.clear();
+        building.clear();
         setDirty();
     }
 

@@ -2,6 +2,7 @@ package io.github.ranger3462.deepmines;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Random;
 import java.util.function.UnaryOperator;
@@ -218,42 +219,50 @@ public final class MinesGrid {
      * spots go in as rock for the builder to fill in.
      */
     public Placed place(ServerLevel level, BlockPos min, Rotation rotation, UnaryOperator<BlockState> rock) {
+        List<BlockPos> ore = new ArrayList<>();
+        List<BlockPos> spawners = new ArrayList<>();
+        // Bottom up, so what hangs or stands on something goes in after it.
+        for (int y = 0; y < sy; y++) {
+            placeLayer(level, min, rotation, rock, y, ore, spawners);
+        }
+        return new Placed(ore, spawners);
+    }
+
+    /**
+     * Places one layer of the grid, {@code y} up, as {@link #place} does, adding its ore spots and spawners to the
+     * lists given. Every block is already in its final shape, so there's no need to update neighbors.
+     */
+    public void placeLayer(ServerLevel level, BlockPos min, Rotation rotation, UnaryOperator<BlockState> rock, int y, Collection<BlockPos> ore,
+            Collection<BlockPos> spawners) {
         boolean turned = rotation == Rotation.CLOCKWISE_90;
         if (!turned && rotation != Rotation.NONE) {
             throw new IllegalArgumentException("Mines pieces are only placed unturned or turned a quarter: " + rotation);
         }
-        List<BlockPos> ore = new ArrayList<>();
-        List<BlockPos> spawners = new ArrayList<>();
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         BlockState stone = rock.apply(Blocks.STONE.defaultBlockState());
-        // Bottom up, so what hangs or stands on something goes in after it. Every block is already in its final shape,
-        // so there's no need to update neighbors.
-        for (int y = 0; y < sy; y++) {
-            for (int z = 0; z < sz; z++) {
-                for (int x = 0; x < sx; x++) {
-                    if (turned) {
-                        pos.set(min.getX() + sz - 1 - z, min.getY() + y, min.getZ() + x);
-                    } else {
-                        pos.set(min.getX() + x, min.getY() + y, min.getZ() + z);
-                    }
-                    int i = index(x, y, z);
-                    BlockState block;
-                    if (type[i] == ORE) {
-                        ore.add(pos.immutable());
-                        block = stone;
-                    } else {
-                        block = rock.apply(block(x, y, z));
-                        if (turned) {
-                            block = block.rotate(Rotation.CLOCKWISE_90);
-                        }
-                        if (block.is(Blocks.SPAWNER)) {
-                            spawners.add(pos.immutable());
-                        }
-                    }
-                    level.setBlock(pos, block, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
+        for (int z = 0; z < sz; z++) {
+            for (int x = 0; x < sx; x++) {
+                if (turned) {
+                    pos.set(min.getX() + sz - 1 - z, min.getY() + y, min.getZ() + x);
+                } else {
+                    pos.set(min.getX() + x, min.getY() + y, min.getZ() + z);
                 }
+                int i = index(x, y, z);
+                BlockState block;
+                if (type[i] == ORE) {
+                    ore.add(pos.immutable());
+                    block = stone;
+                } else {
+                    block = rock.apply(block(x, y, z));
+                    if (turned) {
+                        block = block.rotate(Rotation.CLOCKWISE_90);
+                    }
+                    if (block.is(Blocks.SPAWNER)) {
+                        spawners.add(pos.immutable());
+                    }
+                }
+                level.setBlock(pos, block, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
             }
         }
-        return new Placed(ore, spawners);
     }
 }
