@@ -11,8 +11,8 @@ A mining dimension for NeoForge 1.21.1 that resets on a schedule, so nobody has 
   to dive into), infested (spawners) or vein rooms (timbered galleries after very large veins of one ore), and every
   room and corridor is carved fresh, so no two are alike. Floors are
   built the first time someone reaches them, a little each tick so the server doesn't freeze. Around the floors is
-  cave terrain (vanilla's caves world type with overworld biomes, plus its water and lava pockets, which YUNG's
-  Better Caves needs), until the floors replace it.
+  solid rock (stone, deepslate below Y 0), all one bare biome: no caves, structures or natural mob spawns. Aquifers
+  stay on, because YUNG's Better Caves needs them, but with no open space they never place water.
 - **Resets:** once `resetDays` days (default 7, in `config/deepmines-common.toml`) have passed, the Mines are wiped
   the next time the server starts. Players are warned when they arrive and every 5 minutes after, and anyone who logs
   back in to reset Mines is sent to their spawn point. Portals elsewhere keep working and make a fresh portal in the

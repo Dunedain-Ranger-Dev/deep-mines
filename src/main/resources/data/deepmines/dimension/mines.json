@@ -4,8 +4,8 @@
     "type": "minecraft:noise",
     "settings": "deepmines:mines",
     "biome_source": {
-      "type": "minecraft:multi_noise",
-      "preset": "minecraft:overworld"
+      "type": "minecraft:fixed",
+      "biome": "deepmines:mines"
     }
   }
 }

@@ -20,7 +20,7 @@ import net.neoforged.neoforge.event.server.ServerStartedEvent;
 
 /**
  * The way in and out of the Mines. Whoever comes through a portal is taken on to the start floor (Custom Portal API
- * still makes its arrival portal in the caves, but no one is left there), and where they came from is remembered: the
+ * still makes its arrival portal, in the rock under the floors, but no one is left there), and where they came from is remembered: the
  * start floor's ladder up takes them back. Trips the Mines make themselves (ladders, {@code /deepmines floor}) go
  * straight where they're sent.
  */
