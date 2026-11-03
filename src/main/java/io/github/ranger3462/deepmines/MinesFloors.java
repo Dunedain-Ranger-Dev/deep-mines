@@ -229,7 +229,7 @@ public final class MinesFloors {
             player.displayClientMessage(Component.translatable("message.deepmines.bottom_floor"), true);
             return Optional.empty();
         }
-        return Optional.of(arrive(player, level, floor(level, base, floor + 1, true).arrivalFromAbove(), floor + 1));
+        return Optional.of(arrive(player, level, base, floor(level, base, floor + 1, true).arrivalFromAbove(), floor + 1));
     }
 
     /**
@@ -241,16 +241,19 @@ public final class MinesFloors {
             MinesEntrance.leave(player);
             return Optional.empty();
         }
-        return Optional.of(arrive(player, level, floor(level, base, floor - 1, false).arrivalFromBelow(), floor - 1));
+        return Optional.of(arrive(player, level, base, floor(level, base, floor - 1, false).arrivalFromBelow(), floor - 1));
     }
 
     /** Sends a player to a floor, by its ladder up (on the start floor, where the portal brings them in). */
     public static BlockPos visit(ServerPlayer player, ServerLevel level, BlockPos base, int floor) {
-        return arrive(player, level, floor(level, base, floor, true).arrivalFromAbove(), floor);
+        return arrive(player, level, base, floor(level, base, floor, true).arrivalFromAbove(), floor);
     }
 
-    /** Sends a player to a spot on a floor: now, or once it's built if it's still being dug out. */
-    private static BlockPos arrive(ServerPlayer player, ServerLevel level, BlockPos pos, int floor) {
+    /**
+     * Sends a player to a spot on a floor: now, or once it's built if it's still being dug out. Then the floor below
+     * starts being built, if it isn't already, so it's likely ready by the time they get to its ladder.
+     */
+    private static BlockPos arrive(ServerPlayer player, ServerLevel level, BlockPos base, BlockPos pos, int floor) {
         if (MinesBuildQueue.building(level, pos)) {
             player.displayClientMessage(Component.translatable("message.deepmines.digging", floor), true);
         }
@@ -261,6 +264,9 @@ public final class MinesFloors {
             MinesEntrance.teleportWithin(player, level, pos);
             player.displayClientMessage(floor == START ? Component.translatable("message.deepmines.start_floor")
                     : Component.translatable("message.deepmines.floor", floor), true);
+            if (floor < Config.FLOORS.get()) {
+                floor(level, base, floor + 1, true);
+            }
         });
         return pos;
     }

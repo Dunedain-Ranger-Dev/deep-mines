@@ -38,7 +38,7 @@ import net.minecraft.world.level.block.state.properties.RailShape;
  * the "dig up" ones (with lower caves) mostly over it, and old abandoned drifts lead off the cave towards veins and end
  * in a shaft sunk (or raised) towards more. The other half are old workings like a vein room's, with ore of every
  * kind.</li>
- * <li>Quarries: a stepped open pit, packed with ore around its walls.</li>
+ * <li>Quarries: one open hall with a stepped open pit in the middle, packed with ore around its walls.</li>
  * <li>Flooded rooms: a deep pool to dive into, with its ore around the pool's walls and bottom.</li>
  * <li>Infested rooms: a cave with spawners, bones and cobwebs, and the usual amount of ore.</li>
  * <li>Vein rooms: no cave, but timbered galleries driven through the rock after one ore, in very large veins.</li>
@@ -457,8 +457,9 @@ public final class RoomCarver {
 
     /**
      * The room's rail line: from each doorway with a corridor, straight in to the middle along the doorway's center,
-     * where the lines meet (on a curve, if two meet at a corner). Its bed is laid in planks wherever there's no floor
-     * (a trestle over a pit or pool, standing on posts down its edges every 4 blocks), with room to walk beside it.
+     * where the lines meet (on a curve, if two meet at a corner) on a wooden junction. Its bed is planks 3 wide all the
+     * way, a trestle where there's no floor (over a pit or pool, standing on posts down its edges every 4 blocks), with
+     * room to walk beside it.
      */
     private static void railLine(MinesGrid g, Set<Direction> openings) {
         if (openings.isEmpty()) {
@@ -466,16 +467,36 @@ public final class RoomCarver {
         }
         BlockState planks = Blocks.SPRUCE_PLANKS.defaultBlockState();
         BlockState post = Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState();
+        // The junction: a plank platform 7 across, clear over it, with a lantern on a post at each corner (and the post
+        // run down to the ground, where it stands over a pit).
+        for (int x = MID - 3; x <= MID + 3; x++) {
+            for (int z = MID - 3; z <= MID + 3; z++) {
+                g.put(x, WALK_Y, z, planks);
+                for (int y = WALK_Y + 1; y <= WALK_Y + 3; y++) {
+                    g.setType(x, y, z, AIR);
+                }
+            }
+        }
+        for (int[] c : new int[][] { { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) {
+            int x = MID + c[0] * 3;
+            int z = MID + c[1] * 3;
+            g.put(x, WALK_Y + 1, z, Blocks.SPRUCE_FENCE);
+            g.put(x, WALK_Y + 2, z, Blocks.LANTERN);
+            for (int y = WALK_Y - 1; g.open(x, y, z); y--) {
+                g.put(x, y, z, post);
+            }
+        }
         for (Direction side : openings) {
             RailShape shape = side.getAxis() == Direction.Axis.Z ? RailShape.NORTH_SOUTH : RailShape.EAST_WEST;
             for (int depth = 0; depth <= MID; depth++) {
                 for (int across = MID - 1; across <= MID + 1; across++) {
                     int[] p = fromWall(side, across, depth);
-                    if (depth > 0 && g.passable(p[0], WALK_Y, p[1])) {
+                    boolean gap = g.passable(p[0], WALK_Y, p[1]);
+                    if (depth > 0) {
                         g.put(p[0], WALK_Y, p[1], planks);
-                        for (int y = WALK_Y - 1; across != MID && depth % 4 == 0 && g.open(p[0], y, p[1]); y--) {
-                            g.put(p[0], y, p[1], post);
-                        }
+                    }
+                    for (int y = WALK_Y - 1; gap && depth > 0 && across != MID && depth % 4 == 0 && g.open(p[0], y, p[1]); y--) {
+                        g.put(p[0], y, p[1], post);
                     }
                     for (int y = WALK_Y + 1; y <= WALK_Y + 3 && depth > 0; y++) {
                         g.setType(p[0], y, p[1], AIR);
@@ -841,6 +862,7 @@ public final class RoomCarver {
             int[] mid = at(alongX, a, line);
             if (random.nextInt(4) != 0) {
                 g.put(mid[0], WALK_Y + 1, mid[1], rail);
+                g.put(mid[0], WALK_Y, mid[1], Blocks.SPRUCE_PLANKS);
             }
             int step = (a - start) * dir;
             boolean nearEnd = (end - a) * dir < 2;
@@ -1010,12 +1032,28 @@ public final class RoomCarver {
     }
 
     /**
-     * A quarry: a high hall with a stepped open pit in the middle, each step 3 down from the last with a ladder down it,
-     * and ore packed into the pit's walls and floors.
+     * A quarry: one open hall out to the room's outer walls, on a flat floor under a domed roof, with a stepped open pit
+     * in the middle, each step 3 down from the last with a ladder down it, and ore packed into the pit's walls and floors.
      */
     private static MinesGrid quarry(Random random) {
         MinesGrid g = room(random);
-        cave(g, random, between(random, 16, 18), between(random, 9, 13), between(random, 2, 4), 1, 0);
+        passages(g, random);
+        int edge = between(random, 5, 7);
+        int rise = between(random, 5, 8);
+        double p1 = random.nextDouble() * Math.PI * 2;
+        double p2 = random.nextDouble() * Math.PI * 2;
+        for (int x = 3; x <= MAX - 3; x++) {
+            for (int z = 3; z <= MAX - 3; z++) {
+                double dx = (x - MID) / (double) (MID - 3);
+                double dz = (z - MID) / (double) (MID - 3);
+                double d = Math.min(1, Math.sqrt(dx * dx + dz * dz));
+                double h = edge + rise * (1 - d * d) + 0.8 * Math.sin(x * 0.3 + p1) * Math.cos(z * 0.27 + p2);
+                int top = Math.min(TOP - 3, WALK_Y + (int) Math.round(h));
+                for (int y = WALK_Y + 1; y <= top; y++) {
+                    g.carve(x, y, z);
+                }
+            }
+        }
         int steps = between(random, 4, 5);
         int widest = between(random, 13, 15);
         BlockState ladder = Blocks.LADDER.defaultBlockState().setValue(LadderBlock.FACING, Direction.WEST);
@@ -1036,16 +1074,6 @@ public final class RoomCarver {
             // A ladder down each step, on the east side, against the step, beside where the rail line crosses.
             for (int y = floor + 1; y <= WALK_Y - 3 * k; y++) {
                 g.put(MID + s, y, MID + 3, ladder);
-            }
-        }
-        // A ledge round the rim, so the ways in all meet without going down into the pit.
-        for (int x = MID - widest - 4; x <= MID + widest + 4; x++) {
-            for (int z = MID - widest - 4; z <= MID + widest + 4; z++) {
-                if (Math.abs(x - MID) + Math.abs(z - MID) <= widest * 1.6 + 5 && g.solidRock(x, WALK_Y, z)) {
-                    for (int y = WALK_Y + 1; y <= WALK_Y + 4; y++) {
-                        g.carve(x, y, z);
-                    }
-                }
             }
         }
         smoothRoof(g);
@@ -1297,6 +1325,7 @@ public final class RoomCarver {
             int[] mid = at(alongX, a, line);
             if (rails && random.nextInt(4) != 0) {
                 g.put(mid[0], WALK_Y + 1, mid[1], rail);
+                g.put(mid[0], WALK_Y, mid[1], Blocks.SPRUCE_PLANKS);
             }
         }
         for (int a = from + dir * first; (to - a) * dir >= 2; a += dir * between(random, 4, 6)) {
@@ -1388,6 +1417,7 @@ public final class RoomCarver {
         for (int z = 0; z < TUNNEL_LENGTH; z++) {
             boolean clear = !supports.contains(z);
             g.put(MID_TUNNEL, TUNNEL_WALL, z, rail);
+            g.put(MID_TUNNEL, floor, z, Blocks.OAK_PLANKS);
             for (int x : new int[] { lo, hi }) {
                 if (clear && random.nextInt(12) == 0) {
                     g.put(x, roof, z, Blocks.COBWEB);
@@ -1475,7 +1505,7 @@ public final class RoomCarver {
             for (int depth = 1; depth <= LANDING_DEPTH; depth++) {
                 for (int across = LANDING_START; across < LANDING_START + LANDING_WIDTH; across++) {
                     int[] p = fromWall(side, across, depth);
-                    if (!g.solidRock(p[0], WALK_Y, p[1])) {
+                    if (!g.solid(p[0], WALK_Y, p[1])) {
                         problems.add("no floor in the " + side + " landing at " + p[0] + "," + p[1]);
                     }
                     for (int y = DOOR_BOTTOM_Y; y < DOOR_BOTTOM_Y + DOOR_HEIGHT; y++) {

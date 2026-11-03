@@ -16,6 +16,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.EntityTravelToDimensionEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.server.ServerStartedEvent;
 
 /**
  * The way in and out of the Mines. Whoever comes through a portal is taken on to the start floor (Custom Portal API
@@ -74,6 +75,18 @@ public final class MinesEntrance {
         entry.put("pos", NbtUtils.writeBlockPos(player.blockPosition()));
         player.getPersistentData().put(ENTRY_TAG, entry);
         ENTERING.add(player.getUUID());
+    }
+
+    /**
+     * The start floor is the Mines' lobby, built with the world: when the server starts, if it isn't there yet (a new
+     * world, or just after a reset), so no one waits on it.
+     */
+    @SubscribeEvent
+    public static void onServerStarted(ServerStartedEvent event) {
+        ServerLevel mines = event.getServer().getLevel(MinesPortal.MINES);
+        if (mines != null) {
+            MinesFloors.floor(mines, MinesFloors.BASE, MinesFloors.START, true);
+        }
     }
 
     /** And once they're in, on to the start floor. */
