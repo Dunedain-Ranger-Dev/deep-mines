@@ -492,6 +492,14 @@ public class MinesTests {
         helper.assertTrue(level.getBlockState(start.ladderUp()).is(ModBlocks.LADDER_UP.get()), "and a ladder up and out");
         helper.assertTrue(MinesFloors.floorAt(base, start.ladderDown()) == MinesFloors.START, "it's on the start floor");
         helper.assertTrue(MinesFloorsData.get(level).floor(1).isEmpty(), "floor 1 isn't built until someone goes down");
+        // Deeper floors have more rooms.
+        RandomSource random = RandomSource.create(1);
+        for (int[] tier : new int[][] { { 1, 3, 5 }, { 25, 3, 5 }, { 26, 6, 9 }, { 50, 6, 9 }, { 51, 10, 15 }, { 75, 10, 15 }, { 76, 16, 25 }, { 100, 16, 25 } }) {
+            for (int i = 0; i < 50; i++) {
+                int rooms = MinesFloors.rooms(tier[0], random);
+                helper.assertTrue(rooms >= tier[1] && rooms <= tier[2], "floor " + tier[0] + " has " + rooms + " rooms");
+            }
+        }
 
         ServerPlayer player = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "mines_tester"));
         Optional<BlockPos> toOne = MinesFloors.descend(player, level, base, MinesFloors.START);
