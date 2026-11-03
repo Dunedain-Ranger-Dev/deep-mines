@@ -34,15 +34,22 @@ A living space where players go to gather resources on a more frequent schedule 
   with a cave carved in it at doorway height, rock below to dig down into, and rock above to dig up into. Inside every
   doorway is a landing (solid floor, clear air) so a corridor always leads somewhere to stand. Rooms and corridors are
   carved fresh when a floor is built, each from its own seed (`RoomCarver`), so no two are alike. The kinds (how often
-  each comes up is a setting; a floor's first room is always common):
-  - `common_` (50%): the usual amount of ore. "Dig down" rooms have it mostly under the cave's floor, "dig up" rooms
+  each comes up is a setting, a weight; a floor's first room is always common). A cave's floor rises and falls up to
+  3 blocks, but stays level along the rail line, and its roof is smoothed of notches and slots:
+  - `common_` (50): the usual amount of ore. "Dig down" rooms have it mostly under the cave's floor, "dig up" rooms
     (with lower caves) mostly overhead. Old abandoned drifts lead off the cave towards veins and end in a shaft sunk
     or raised towards more, showing where to dig.
-  - `quarry_` (15%): a stepped open pit, packed with ore around its walls.
-  - `flooded_` (15%): a deep pool, level with the floor, to dive into; its ore is around the pool's walls and bottom.
-  - `infested_` (20%): spawners (zombies and skeletons until MINE-25 picks the Mines' own mobs), bones and cobwebs,
+  - `quarry_` (15): a stepped open pit, packed with ore around its walls.
+  - `flooded_` (15): a deep pool, level with the floor, to dive into; its ore is around the pool's walls and bottom.
+  - `infested_` (20): spawners (zombies and skeletons until MINE-25 picks the Mines' own mobs), bones and cobwebs,
     and the usual amount of ore.
-  - `tunnel_`: corridors, 9 x 8 x 31: a low timbered mineshaft (3 blocks to walk under the beams), with a little ore.
+  - `vein_` (10): no cave, but timbered galleries (like the corridors) in from every doorway to a hall in the middle,
+    with crosscuts off them ending at veins. Very large veins show in the galleries' walls and roofs, all of one ore,
+    picked from the floor's table when the floor is built. About 40% more ore than a common room.
+  - `tunnel_`: corridors, 11 x 10 x 31: a timbered mineshaft with a passage 7 wide and 6 high, with a little ore.
+    Every 4 to 6 blocks a support: stripped spruce legs on upright barrels, a beam across their tops with 5 blocks
+    under it, upside-down spruce stairs rounding off its inside corners (two along the beam, one down each leg), and
+    usually a lantern hanging beside the middle of the beam. Vein rooms' galleries use the same supports.
   - `cap_`: plain rock, for doorways with no corridor.
   - `start_`: the start hall.
 - **The rules every room keeps.** Sealed all round but its doorways, a landing inside each, a way to walk (or climb,
@@ -111,7 +118,7 @@ the `deepmines:in_mines` filter).
 | Reset frequency | 7 days | How often the Mines reset |
 | Floors | 100 | How many floors the Mines go down (`floors`) |
 | Rooms per floor | 3 | How many rooms each floor has (`cavesPerFloor`) |
-| Room mix | 50 / 15 / 15 / 20 | How often common, quarry, flooded and infested rooms come up (`[rooms]`) |
+| Room mix | 50 / 15 / 15 / 20 / 10 | How often common, quarry, flooded, infested and vein rooms come up, as weights (`[rooms]`) |
 | Hand-built rooms | 25% | How often a hand-built room or corridor is used instead of a carved one, if there are any (`handBuilt`) |
 | Team Mines | Off (server-wide) | Ties the Mines to each FTB Team or party instead, to prevent griefing |
 | Ore modifier | 1.0 | A global multiplier on how often ore appears |
@@ -141,7 +148,7 @@ Built in 0.1.0 (MINE-2 to MINE-4), and tested in game on 2026-11-02:
      and side room is drawn block by block in Java (`SmallTunnel`, `BigTunnel` and the rest), sized as it goes and
      carved into whatever stone is there. Its pieces aren't an API, and each needs its own mineshaft config and
      YUNG's API, so placing one inside our grid would break with any update. Its license (LGPL-3.0) isn't the
-     problem. Our corridors are ordinary `tunnel_` pieces (9 x 8 x 31 since MINE-15), built in its style: plank floors,
+     problem. Our corridors are ordinary `tunnel_` pieces (11 x 10 x 31 since MINE-36), built in its style: plank floors,
      log legs and fence supports, rails, the odd chest minecart. Its per-biome block palettes in
      `data/bettermineshafts/worldgen/structure/` (oak, spruce, jungle, mesa and so on) are a good guide to the look.
    - While the Mines use overworld biomes and cave terrain, Better Mineshafts' own mineshafts probably generate in

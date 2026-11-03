@@ -84,6 +84,7 @@ public final class MinesFloors {
         weights.put(Kind.QUARRY, Config.QUARRY_ROOMS.get());
         weights.put(Kind.FLOODED, Config.FLOODED_ROOMS.get());
         weights.put(Kind.INFESTED, Config.INFESTED_ROOMS.get());
+        weights.put(Kind.VEIN, Config.VEIN_ROOMS.get());
         int total = weights.values().stream().mapToInt(Integer::intValue).sum();
 
         Map<Cell, Kind> kinds = new LinkedHashMap<>();

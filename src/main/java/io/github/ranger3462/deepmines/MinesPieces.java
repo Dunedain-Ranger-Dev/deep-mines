@@ -37,6 +37,8 @@ public final class MinesPieces {
         FLOODED("flooded_", true),
         /** A room held by mobs from spawners. */
         INFESTED("infested_", true),
+        /** Old workings through solid rock, after very large veins of one ore. */
+        VEIN("vein_", true),
         /** A corridor between two rooms, with a little ore. */
         TUNNEL("tunnel_", false),
         /** A plug of plain rock for a doorway with no corridor. */

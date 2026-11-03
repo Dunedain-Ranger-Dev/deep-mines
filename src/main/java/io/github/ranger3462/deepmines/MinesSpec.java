@@ -35,13 +35,16 @@ public final class MinesSpec {
     public static final int CAP_HEIGHT = DOOR_HEIGHT;
     public static final int CAP_DEPTH = 1;
 
-    // Corridors: 9 wide (along x), 8 tall, 31 long (along z), with rock two thick around a doorway-sized passage.
-    public static final int TUNNEL_WIDTH = 9;
-    public static final int TUNNEL_HEIGHT = 8;
+    // Corridors: 11 wide (along x), 10 tall, 31 long (along z), with rock two thick around a passage 7 wide and 6 tall:
+    // wider and taller than the doorways, so there's room to walk under the supports.
+    public static final int TUNNEL_WIDTH = 11;
+    public static final int TUNNEL_HEIGHT = 10;
     public static final int TUNNEL_LENGTH = 31;
     /** How thick a corridor's rock is around its passage. */
-    public static final int TUNNEL_WALL = (TUNNEL_WIDTH - DOOR_WIDTH) / 2;
-    /** First block of a corridor across a room side: centered on the doorway (blocks 20-28). */
+    public static final int TUNNEL_WALL = 2;
+    /** The top of a corridor's passage, where its supports' beams run. */
+    public static final int TUNNEL_ROOF = TUNNEL_HEIGHT - 1 - TUNNEL_WALL;
+    /** First block of a corridor across a room side: centered on the doorway (blocks 19-29). */
     public static final int TUNNEL_START = (ROOM_SIZE - TUNNEL_WIDTH) / 2;
     /** Where a corridor's bottom sits in a room's frame: its passage lines up with the doorways. */
     public static final int TUNNEL_Y = DOOR_BOTTOM_Y - TUNNEL_WALL;
