@@ -14,7 +14,7 @@ A living space where players go to gather resources on a more frequent schedule 
 
 ## The Mines
 
-- **About 3x the ore** of ordinary overworld caves.
+- **Plenty of ore,** far more than ordinary caves, set by hand for each kind of room (below).
 - **Built with Dungeon Delving's generator:** rooms, linked by corridors in the style of YUNG's Better Mineshafts.
   Dungeon Delving's layout generator decides where a floor's rooms go and which are joined; the Mines' own builder
   (`MinesBuilder`) places their own, bigger pieces.
@@ -81,7 +81,8 @@ A living space where players go to gather resources on a more frequent schedule 
   place of the other stones and deepslate ore.
 - **Infested caves.** Hostile mobs hold the caves: players fight them first, then mine freely.
   - Mostly undead, plus natural hostile cave creatures (to be decided: things like cave fishers).
-  - No natural spawning (MINE-22). Mobs come from the infested rooms' spawners.
+  - No natural spawning (MINE-22). Mobs come from the infested rooms' spawners. The Mines' biome spawns nothing
+    (MINE-16), which covers vanilla's spawning; mods that spawn mobs their own way still need checking.
 
 ## Ore by floor
 
@@ -92,7 +93,7 @@ biome-only ore (emerald, badlands gold, dripstone copper) and the big copper and
 [`ore-table.py`](ore-table.py) works it out for any floor; run it again after changing the rules.
 
 The table is each ore's share of the ore on a floor. How much ore there is in total stays the same on every floor
-(about 3x the overworld), so a deeper floor is better because of what it has, not because it has more of it.
+(set per kind of room), so a deeper floor is better because of what it has, not because it has more of it.
 Floors 50 and below are past vanilla's Y 0, so they're deepslate, with the deepslate ores.
 
 | Floor | ~Y | Coal | Copper | Iron | Gold | Redstone | Lapis | Diamond | Mithril |
@@ -141,7 +142,7 @@ the `deepmines:in_mines` filter).
 
 Built in 0.1.0 (MINE-2 to MINE-4), and tested in game on 2026-11-02:
 
-- The Mines dimension, using vanilla cave terrain. Building the floors with Dungeon Delving replaces that terrain.
+- The Mines dimension. Its vanilla cave terrain was replaced by solid rock with the built floors in it (MINE-16).
 - A deepslate-brick portal that anyone can build anywhere. That conflicts with entry from the Dwarven capital only.
 - The weekly reset and its warnings (`resetDays`, default 7), shared by everyone. This part of the goal is done.
 
@@ -165,14 +166,15 @@ Built in 0.1.0 (MINE-2 to MINE-4), and tested in game on 2026-11-02:
      problem. Our corridors are ordinary `tunnel_` pieces (11 x 10 x 31 since MINE-36), built in its style: plank floors,
      log legs and fence supports, rails, the odd chest minecart. Its per-biome block palettes in
      `data/bettermineshafts/worldgen/structure/` (oak, spruce, jungle, mesa and so on) are a good guide to the look.
-   - While the Mines use overworld biomes and cave terrain, Better Mineshafts' own mineshafts probably generate in
-     them too. That goes away when the floors replace the terrain (MINE-16), which should turn structures off.
+   - Better Mineshafts' own mineshafts don't generate in the Mines: since MINE-16 they're one bare biome
+     (`deepmines:mines`) with no structures.
 4. **Ore below floor 3.** How many floors are there, and where do gold, redstone, lapis, diamond and the dwarves'
    rare ore come in?
    - **Decided:** 100 floors, following vanilla's ore by height from Y 64 down (see [Ore by floor](#ore-by-floor)).
      The rare ore is Mithril, a small chance on every floor below 5. The percentages are a first pass for tuning.
 5. **The 3x baseline.** Measure ore per block of open cave in a vanilla overworld world, so "3x" is a number we can
    test.
+   - **Dropped:** the amounts were tuned by hand in game instead (MINE-36), so there's no baseline to match.
 6. **Natural cave mobs.** Which ones, and from which mod? None are in the pack yet.
    - Left open: existing mobs to find, or new ones to design. Undead only until then.
 7. **Team Mines.** One region per team inside the same dimension (the way Dungeon Delving gives each run a region),
@@ -188,7 +190,7 @@ Each goal has its own task under the Deep Mines project in Jira, with sub-tasks 
 | Goal | Task | Steps |
 |---|---|---|
 | Floors built with Dungeon Delving's generator | MINE-6 | MINE-11 to MINE-16 |
-| Ore: about 3x, better the deeper you go | MINE-7 | MINE-17 to MINE-21, MINE-35 |
+| Ore: plenty, better the deeper you go | MINE-7 | MINE-18 to MINE-20, MINE-35 |
 | Infested caves: fight first, then mine | MINE-8 | MINE-22 to MINE-25 |
 | Access only from the Dwarven capital | MINE-9 | MINE-26 here; the rest is Kingdom Sim's KING-18 (KING-19 to 21) |
 | Team Mines (setting) | MINE-10 | MINE-30 to MINE-33 |

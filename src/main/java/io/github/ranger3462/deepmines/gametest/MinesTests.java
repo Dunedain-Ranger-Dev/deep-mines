@@ -40,6 +40,7 @@ import net.kyrptonaught.customportalapi.CustomPortalApiRegistry;
 import net.kyrptonaught.customportalapi.util.PortalLink;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.HolderSet;
 import net.minecraft.core.Vec3i;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -51,12 +52,16 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
 import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.levelgen.DensityFunction;
+import net.minecraft.world.level.levelgen.GenerationStep;
 import net.minecraft.world.level.levelgen.placement.PlacedFeature;
 import net.minecraft.world.level.levelgen.placement.PlacementContext;
 import net.minecraft.world.level.levelgen.structure.templatesystem.LiquidSettings;
@@ -85,11 +90,26 @@ public class MinesTests {
         var server = helper.getLevel().getServer();
         var registries = server.registryAccess();
         var type = registries.registryOrThrow(Registries.DIMENSION_TYPE).get(MinesPortal.MINES.location());
-        helper.assertTrue(type != null && type.minY() == -64 && type.height() == 192, "the Mines should end at the caves' bedrock roof");
+        helper.assertTrue(type != null && type.minY() == -64 && type.height() == 192, "the Mines should end at their bedrock roof");
         var file = server.getResourceManager().getResource(DeepMines.id("dimension/mines.json")).orElseThrow();
         try (var reader = file.openAsReader()) {
             var result = LevelStem.CODEC.parse(RegistryOps.create(JsonOps.INSTANCE, registries), JsonParser.parseReader(reader));
             helper.assertTrue(result.isSuccess(), "the Mines dimension should decode: " + result.error().map(Object::toString).orElse(""));
+            // One bare biome throughout: no caves carved, no structures or features, and no mobs spawning naturally.
+            var biomes = result.getOrThrow().generator().getBiomeSource().possibleBiomes();
+            helper.assertTrue(biomes.size() == 1 && biomes.iterator().next().is(DeepMines.id("mines")), "the Mines should be all one biome: " + biomes);
+            Biome biome = biomes.iterator().next().value();
+            for (GenerationStep.Carving step : GenerationStep.Carving.values()) {
+                helper.assertTrue(!biome.getGenerationSettings().getCarvers(step).iterator().hasNext(), "the Mines' biome should carve no caves");
+            }
+            // Other mods add their own everywhere (Apotheosis' dungeons and spawners, which need open cave to place, and
+            // the pack may add ore), but nothing of vanilla's.
+            var vanilla = biome.getGenerationSettings().features().stream().flatMap(HolderSet::stream)
+                    .filter(feature -> feature.is(key -> key.location().getNamespace().equals("minecraft"))).toList();
+            helper.assertTrue(vanilla.isEmpty(), "the Mines' biome should place none of vanilla's features: " + vanilla);
+            for (MobCategory category : MobCategory.values()) {
+                helper.assertTrue(biome.getMobSettings().getMobs(category).isEmpty(), "nothing should spawn naturally in the Mines");
+            }
         } catch (IOException e) {
             helper.fail("couldn't read the Mines dimension: " + e);
         }
@@ -97,13 +117,20 @@ public class MinesTests {
     }
 
     /**
-     * The Mines' terrain is vanilla's caves with aquifers turned on: YUNG's Better Caves (in the pack) crashes chunk
-     * generation in any dimension without them, which broke the portal in the pack.
+     * The Mines' terrain is solid rock, so the built floors are all there is, but with aquifers still turned on: YUNG's
+     * Better Caves (in the pack) crashes chunk generation in any dimension without them, which broke the portal in the
+     * pack. With no open space, they never place any water.
      */
     @GameTest(template = EMPTY)
-    public static void theMinesTerrainHasAquifers(GameTestHelper helper) {
+    public static void theMinesTerrainIsSolidRock(GameTestHelper helper) {
         var settings = helper.getLevel().registryAccess().registryOrThrow(Registries.NOISE_SETTINGS).get(DeepMines.id("mines"));
         helper.assertTrue(settings != null && settings.aquifersEnabled(), "the Mines' noise settings should have aquifers on");
+        DensityFunction density = settings.noiseRouter().finalDensity();
+        for (int x = -2048; x <= 102400; x += 4093) {
+            for (int y = -64; y < 128; y += 7) {
+                helper.assertTrue(density.compute(new DensityFunction.SinglePointContext(x, y, x / 3)) > 0, "the Mines should be solid at " + x + ", " + y);
+            }
+        }
         helper.succeed();
     }
 
@@ -132,7 +159,7 @@ public class MinesTests {
         PortalLink link = CustomPortalApiRegistry.getPortalLinkFromBase(MinesPortal.FRAME);
         helper.assertTrue(link != null && link.dimID.equals(MinesPortal.MINES.location()), "a deepslate brick frame should lead to the Mines");
         helper.assertTrue(link.portalSearchYTop == MinesPortal.ARRIVAL_TOP_Y && link.portalSearchYBottom == MinesPortal.ARRIVAL_BOTTOM_Y,
-                "arrival portals should be placed in caves, not on the roof");
+                "arrival portals should be placed well under the roof");
         helper.assertTrue(MinesFloors.BASE.getY() > MinesPortal.ARRIVAL_TOP_Y, "and below the floors, so they never cut into one");
         helper.succeed();
     }

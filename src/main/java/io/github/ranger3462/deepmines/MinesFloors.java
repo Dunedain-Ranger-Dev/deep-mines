@@ -45,7 +45,7 @@ public final class MinesFloors {
     public static final int FLOOR_SPACING = 1024;
     /**
      * Where floor 1's first room is centered (at the bottom of the room); floor n is {@code (n - 1) * FLOOR_SPACING}
-     * east of it. High enough to stay clear of the portals Custom Portal API makes in the caves below (up to Y 40).
+     * east of it. High enough to stay clear of the portals Custom Portal API makes in the rock below (up to Y 40).
      */
     public static final BlockPos BASE = new BlockPos(0, 60, 0);
 
