@@ -51,6 +51,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Rotation;
@@ -538,6 +539,57 @@ public class MinesTests {
         helper.assertTrue(MinesFloors.ascend(player, level, base, MinesFloors.START).isEmpty(), "up from the start floor leads out of the Mines");
         MinesFloorsData.get(level).clear();
         helper.succeed();
+    }
+
+    /**
+     * Torch light on a built floor fades out a level a block, chunk borders and all (MINE-37): on the server, a torch
+     * in a run of open air across a chunk border lights each block along it at least 14 less its distance, once the
+     * light engine (off the server thread) has caught up.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = 200000, batch = "light")
+    public static void torchLightCrossesChunksOnBuiltFloors(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinesFloorsData.get(level).clear();
+        BlockPos base = helper.absolutePos(BlockPos.ZERO).above(120);
+        MinesFloors.floor(level, base, 1);
+        BlockPos min = MinesBuilder.roomMin(MinesFloors.center(base, 1), Cell.ORIGIN);
+        // A run of 14 open blocks east from a torch, crossing a chunk border.
+        BlockPos torch = null;
+        search:
+        for (int y = WALK_Y + 1; y <= WALK_Y + 4; y++) {
+            for (int z = 2; z < ROOM_SIZE - 2; z++) {
+                for (int x = 1; x < ROOM_SIZE - 15; x++) {
+                    BlockPos start = min.offset(x, y, z);
+                    if (Math.floorMod(start.getX(), 16) < 3) {
+                        continue;
+                    }
+                    boolean open = true;
+                    for (int d = 0; d <= 13 && open; d++) {
+                        open = level.getBlockState(start.east(d)).isAir();
+                    }
+                    if (open && (start.getX() >> 4) != (start.east(13).getX() >> 4)) {
+                        torch = start;
+                        break search;
+                    }
+                }
+            }
+        }
+        helper.assertTrue(torch != null, "no open run across a chunk border in floor 1's first room");
+        BlockPos at = torch;
+        level.setBlock(at, Blocks.TORCH.defaultBlockState(), Block.UPDATE_ALL);
+        // The light engine works off the server thread, and has a floor's worth of changes to catch up on first.
+        helper.succeedWhen(() -> {
+            List<String> dark = new ArrayList<>();
+            for (int d = 0; d <= 13; d++) {
+                BlockPos pos = at.east(d);
+                int light = level.getBrightness(LightLayer.BLOCK, pos);
+                if (light < 14 - d) {
+                    dark.add(d + " east (x " + pos.getX() + ", chunk " + (pos.getX() >> 4) + "): " + light);
+                }
+            }
+            helper.assertTrue(dark.isEmpty(), "torch light falls short: " + dark);
+            MinesFloorsData.get(level).clear();
+        });
     }
 
     @GameTest(template = EMPTY)
