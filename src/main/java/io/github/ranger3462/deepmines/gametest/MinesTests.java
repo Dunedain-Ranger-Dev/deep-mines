@@ -107,8 +107,16 @@ public class MinesTests {
             var vanilla = biome.getGenerationSettings().features().stream().flatMap(HolderSet::stream)
                     .filter(feature -> feature.is(key -> key.location().getNamespace().equals("minecraft"))).toList();
             helper.assertTrue(vanilla.isEmpty(), "the Mines' biome should place none of vanilla's features: " + vanilla);
+            if (ModList.get().isLoaded("kubejs") && ModList.get().isLoaded("iceandfire")) { // The pack adds Ice and Fire's ore.
+                for (String ore : List.of("silver_ore", "sapphire_ore")) {
+                    ResourceLocation id = ResourceLocation.fromNamespaceAndPath("iceandfire", ore);
+                    helper.assertTrue(biome.getGenerationSettings().features().stream().flatMap(HolderSet::stream).anyMatch(feature -> feature.is(id)),
+                            "with the pack, Ice and Fire's " + ore + " generates in the Mines");
+                }
+            }
             for (MobCategory category : MobCategory.values()) {
-                helper.assertTrue(biome.getMobSettings().getMobs(category).isEmpty(), "nothing should spawn naturally in the Mines");
+                var mobs = biome.getMobSettings().getMobs(category).unwrap().stream().map(spawn -> BuiltInRegistries.ENTITY_TYPE.getKey(spawn.type)).toList();
+                helper.assertTrue(mobs.isEmpty(), "nothing should spawn naturally in the Mines: " + category.getName() + " " + mobs);
             }
         } catch (IOException e) {
             helper.fail("couldn't read the Mines dimension: " + e);
