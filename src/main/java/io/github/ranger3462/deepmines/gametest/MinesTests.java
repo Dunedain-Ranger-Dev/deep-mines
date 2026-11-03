@@ -22,6 +22,7 @@ import io.github.ranger3462.deepmines.MinesBuilder;
 import io.github.ranger3462.deepmines.MinesBuilder.Placement;
 import io.github.ranger3462.deepmines.MinesFloors;
 import io.github.ranger3462.deepmines.MinesFloorsData;
+import io.github.ranger3462.deepmines.MinesGrid;
 import io.github.ranger3462.deepmines.MinesPieces;
 import io.github.ranger3462.deepmines.MinesPieces.Kind;
 import io.github.ranger3462.deepmines.MinesPortal;
@@ -29,6 +30,7 @@ import io.github.ranger3462.deepmines.MinesReset;
 import io.github.ranger3462.deepmines.ModBlocks;
 import io.github.ranger3462.deepmines.OreTable;
 import io.github.ranger3462.deepmines.OreTable.Ore;
+import io.github.ranger3462.deepmines.RoomCarver;
 import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonLayout.Cell;
 import net.kyrptonaught.customportalapi.CustomPortalApiRegistry;
 import net.kyrptonaught.customportalapi.util.PortalLink;
@@ -47,7 +49,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
 import net.minecraft.world.level.dimension.LevelStem;
@@ -141,16 +142,26 @@ public class MinesTests {
         helper.succeed();
     }
 
-    /** A floor's plan: the Mines' own pieces only, its first room common, a corridor per join and a cap per dead end. */
+    /**
+     * A floor's plan: carved rooms and corridors (the mod has no hand-built ones) and the Mines' own caps, its first room
+     * common, a corridor per join and a cap per dead end.
+     */
     @GameTest(template = EMPTY)
     public static void floorsArePlannedFromTheMinesOwnPieces(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<Placement> placements = MinesFloors.plan(level, BlockPos.ZERO, 5, RandomSource.create(1));
         for (Placement placement : placements) {
-            helper.assertTrue(placement.template().getNamespace().equals(DeepMines.MODID)
-                    && placement.template().getPath().startsWith(MinesPieces.FOLDER + "/" + placement.kind().prefix()),
-                    "every piece should be the Mines' own, of its kind: " + placement.template());
+            if (placement.kind().carved()) {
+                helper.assertTrue(placement.isCarved(), "rooms and corridors are carved: " + placement);
+                helper.assertTrue(placement.kind() == Kind.TUNNEL || placement.rotation() == Rotation.NONE, "and rooms aren't turned: " + placement);
+            } else {
+                helper.assertTrue(!placement.isCarved() && placement.template().getNamespace().equals(DeepMines.MODID)
+                        && placement.template().getPath().startsWith(MinesPieces.FOLDER + "/" + placement.kind().prefix()),
+                        "every saved piece should be the Mines' own, of its kind: " + placement.template());
+            }
         }
+        helper.assertTrue(placements.stream().filter(Placement::isCarved).map(Placement::seed).distinct().count()
+                == placements.stream().filter(Placement::isCarved).count(), "each carved from its own seed");
         long rooms = placements.stream().filter(p -> p.kind().room()).count();
         long tunnels = placements.stream().filter(p -> p.kind() == Kind.TUNNEL).count();
         long caps = placements.stream().filter(p -> p.kind() == Kind.CAP).count();
@@ -182,36 +193,33 @@ public class MinesTests {
     }
 
     /**
-     * Every piece is the right size and keeps the rules a floor relies on. Rooms: solid all round but their doorways,
-     * a landing inside each, water only in flooded rooms, spawners in infested ones, and more ore in quarries than
-     * common rooms. Corridors: solid all round, open at both ends, a clear walkway. Caps: solid, no ore. The start hall:
-     * sealed, with room at its ladders.
+     * The saved pieces load at the right size: the cap is solid, and the start hall sealed, with room at its ladders.
+     * The mod has no saved rooms or corridors.
      */
-    @GameTest(template = EMPTY, timeoutTicks = 400)
-    public static void minePiecesFollowTheRules(GameTestHelper helper) {
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void savedPiecesFollowTheRules(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         MinesPieces pieces = MinesFloors.pieces(level);
         helper.assertTrue(pieces.skipped().isEmpty(), "no piece should be skipped: " + pieces.skipped());
         for (Kind kind : Kind.values()) {
-            helper.assertTrue(pieces.all().containsValue(kind), "there should be " + kind.prefix() + " pieces");
+            helper.assertTrue(kind.carved() != pieces.all().containsValue(kind), "saved " + kind.prefix() + " pieces only for the fixed kinds");
         }
-        helper.assertTrue(pieces.pool(Kind.COMMON).size() >= 4, "dig-up and dig-down common rooms");
 
         BlockPos corner = helper.absolutePos(BlockPos.ZERO).above(150);
         List<String> problems = new ArrayList<>();
-        Map<Kind, List<Integer>> ore = new EnumMap<>(Kind.class);
         for (var piece : pieces.all().entrySet()) {
             Kind kind = piece.getValue();
             String name = piece.getKey().getPath();
             StructureTemplate template = level.getStructureManager().get(piece.getKey()).orElseThrow();
-            ore.computeIfAbsent(kind, k -> new ArrayList<>()).add(template.filterBlocks(BlockPos.ZERO, new StructurePlaceSettings(), ModBlocks.ORE_SPOT.get()).size());
+            if (!template.filterBlocks(BlockPos.ZERO, new StructurePlaceSettings(), ModBlocks.ORE_SPOT.get()).isEmpty()) {
+                problems.add(name + " has ore");
+            }
             template.placeInWorld(level, corner, corner, new StructurePlaceSettings().setLiquidSettings(LiquidSettings.IGNORE_WATERLOGGING), level.getRandom(), Block.UPDATE_CLIENTS);
             Vec3i size = kind.size();
-            switch (kind) {
-                case COMMON, QUARRY, FLOODED, INFESTED -> checkRoom(level, corner, kind, name, problems);
-                case START -> checkStart(level, corner, name, problems);
-                case TUNNEL -> checkTunnel(level, corner, name, problems);
-                case CAP -> forEach(corner, size, (pos, x, y, z) -> {
+            if (kind == Kind.START) {
+                checkStart(level, corner, name, problems);
+            } else {
+                forEach(corner, size, (pos, x, y, z) -> {
                     if (!solid(level, pos)) {
                         problems.add(name + ": a hole at " + x + "," + y + "," + z);
                     }
@@ -222,11 +230,52 @@ public class MinesTests {
             }
         }
         helper.assertTrue(problems.isEmpty(), problems.size() + " problems, first: " + problems.stream().limit(4).toList());
+        helper.succeed();
+    }
+
+    /** How many of each carved kind {@link #carvedRoomsFollowTheRules} carves. */
+    private static final int CARVINGS = 60;
+
+    /**
+     * Carves {@link #CARVINGS} of every kind of room and corridor, and every one keeps the rules a floor relies on
+     * ({@link RoomCarver#problems}). Common rooms have the usual amount of ore, quarries far more, corridors a little;
+     * few need carving again, and hardly any need walkways.
+     */
+    @GameTest(template = EMPTY)
+    public static void carvedRoomsFollowTheRules(GameTestHelper helper) {
+        List<String> problems = new ArrayList<>();
+        Map<Kind, List<Integer>> ore = new EnumMap<>(Kind.class);
+        int retried = 0;
+        int bridged = 0;
+        int total = 0;
+        long started = System.nanoTime();
+        for (Kind kind : Kind.values()) {
+            if (!kind.carved()) {
+                continue;
+            }
+            for (int seed = 0; seed < CARVINGS; seed++) {
+                String name = kind + " " + seed;
+                RoomCarver.Carved carved = RoomCarver.carve(kind, seed * 7919L + kind.ordinal());
+                RoomCarver.problems(carved.grid(), kind).forEach(problem -> problems.add(name + ": " + problem));
+                ore.computeIfAbsent(kind, k -> new ArrayList<>()).add(carved.grid().count(MinesGrid.ORE));
+                retried += carved.tries() > 1 ? 1 : 0;
+                bridged += carved.bridged() ? 1 : 0;
+                total++;
+            }
+        }
+        DeepMines.LOGGER.info("Carved {} rooms and corridors in {} ms: {} carved again, {} with walkways", total,
+                (System.nanoTime() - started) / 1_000_000, retried, bridged);
+        helper.assertTrue(problems.isEmpty(), problems.size() + " problems, first: " + problems.stream().limit(4).toList());
+        helper.assertTrue(bridged * 20 <= total, bridged + " of " + total + " needed walkways");
         double common = ore.get(Kind.COMMON).stream().mapToInt(Integer::intValue).average().orElse(0);
         double quarry = ore.get(Kind.QUARRY).stream().mapToInt(Integer::intValue).average().orElse(0);
-        helper.assertTrue(common > 300 && quarry > common * 1.5, "quarries should have far more ore than common rooms: " + ore);
-        helper.assertTrue(ore.get(Kind.TUNNEL).stream().allMatch(n -> n > 0 && n < 30), "corridors have a little ore: " + ore.get(Kind.TUNNEL));
-        helper.assertTrue(ore.get(Kind.CAP).stream().allMatch(n -> n == 0) && ore.get(Kind.START).stream().allMatch(n -> n == 0), "caps and the hall have none");
+        helper.assertTrue(common > 300 && quarry > common * 1.5, "quarries should have far more ore than common rooms: " + common + ", " + quarry);
+        helper.assertTrue(ore.get(Kind.COMMON).stream().allMatch(n -> n > 200), "every common room has a fair bit of ore: " + ore.get(Kind.COMMON));
+        helper.assertTrue(ore.get(Kind.TUNNEL).stream().allMatch(n -> n < 30)
+                && ore.get(Kind.TUNNEL).stream().mapToInt(Integer::intValue).average().orElse(0) > 3, "corridors have a little ore: " + ore.get(Kind.TUNNEL));
+        helper.assertTrue(RoomCarver.carve(Kind.QUARRY, 42).grid().block(10, 10, 10) == RoomCarver.carve(Kind.QUARRY, 42).grid().block(10, 10, 10)
+                && RoomCarver.carve(Kind.COMMON, 1).grid().count(MinesGrid.ORE) != RoomCarver.carve(Kind.COMMON, 2).grid().count(MinesGrid.ORE),
+                "the same seed carves the same room, and different seeds different ones");
         helper.succeed();
     }
 
@@ -328,18 +377,18 @@ public class MinesTests {
     }
 
     /**
-     * Placing a piece on a deep floor turns its stone to deepslate (and tuff) and its ore to the deepslate kind, its ore
-     * spots all become ore, and its spawners get undead to spawn.
+     * A carved room placed on a deep floor keeps the rules in the world too, with its stone turned to deepslate (and
+     * tuff) and its ore to the deepslate kind; its ore spots all become ore, and its spawners get undead to spawn. A
+     * corridor keeps its rules, and turned to run east-west, stays open at both ends.
      */
     @GameTest(template = EMPTY, timeoutTicks = 200)
-    public static void deepFloorsAreDeepslateWithTheirOre(GameTestHelper helper) {
+    public static void carvedPiecesArePlacedWithTheirOre(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        MinesPieces pieces = MinesFloors.pieces(level);
         BlockPos corner = helper.absolutePos(BlockPos.ZERO).above(150);
-        ResourceLocation infested = pieces.pool(Kind.INFESTED).get(0);
-        MinesBuilder.place(level, new Placement(infested, Kind.INFESTED, corner, Rotation.CLOCKWISE_90, Mirror.NONE), 100, RandomSource.create(3));
+        MinesBuilder.place(level, Placement.carved(Kind.INFESTED, corner, Rotation.NONE, 3), 100, RandomSource.create(3));
         int[] counts = new int[4]; // stone, deepslate, ores, spawners with undead
         List<String> problems = new ArrayList<>();
+        checkRoom(level, corner, Kind.INFESTED, "infested", problems);
         forEach(corner, Kind.INFESTED.size(), (pos, x, y, z) -> {
             var state = level.getBlockState(pos);
             if (state.is(Blocks.STONE) || state.is(Blocks.ANDESITE) || state.is(Blocks.DIORITE) || state.is(Blocks.GRANITE)) {
@@ -362,13 +411,33 @@ public class MinesTests {
                 }
             }
         });
-        for (BlockPos pos : BlockPos.betweenClosed(corner, corner.offset(ROOM_SIZE - 1, ROOM_HEIGHT - 1, ROOM_SIZE - 1))) {
-            level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+        clear(level, corner, Kind.INFESTED.size());
+
+        MinesBuilder.place(level, Placement.carved(Kind.TUNNEL, corner, Rotation.NONE, 5), 1, RandomSource.create(5));
+        checkTunnel(level, corner, "tunnel", problems);
+        clear(level, corner, Kind.TUNNEL.size());
+        MinesBuilder.place(level, Placement.carved(Kind.TUNNEL, corner, Rotation.CLOCKWISE_90, 5), 1, RandomSource.create(5));
+        for (int across = TUNNEL_WALL; across < TUNNEL_WALL + DOOR_WIDTH; across++) {
+            for (int y = TUNNEL_WALL; y < TUNNEL_WALL + DOOR_HEIGHT; y++) {
+                for (int x : new int[] { 0, TUNNEL_LENGTH - 1 }) {
+                    if (!level.getBlockState(corner.offset(x, y, across)).isAir()) {
+                        problems.add("the turned tunnel is blocked at its end at " + x + "," + y + "," + across);
+                    }
+                }
+            }
         }
+        clear(level, corner, new Vec3i(TUNNEL_LENGTH, TUNNEL_HEIGHT, TUNNEL_WIDTH));
+
         helper.assertTrue(problems.isEmpty(), problems.size() + " problems, first: " + problems.stream().limit(3).toList());
         helper.assertTrue(counts[0] == 0 && counts[1] > 10000, "floor 100 is deepslate and tuff: " + counts[0] + " stone, " + counts[1] + " deepslate");
         helper.assertTrue(counts[2] > 300 && counts[3] >= 2, counts[2] + " ore, " + counts[3] + " spawners of undead");
         helper.succeed();
+    }
+
+    private static void clear(ServerLevel level, BlockPos corner, Vec3i size) {
+        for (BlockPos pos : BlockPos.betweenClosed(corner, corner.offset(size.getX() - 1, size.getY() - 1, size.getZ() - 1))) {
+            level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+        }
     }
 
     /**

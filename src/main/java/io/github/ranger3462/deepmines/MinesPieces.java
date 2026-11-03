@@ -16,8 +16,10 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.RandomSource;
 
 /**
- * The Mines' pieces, from {@code data/deepmines/structure/mines/} in the mod and data packs, sorted into pools by the
- * start of their file names. Pieces of the wrong size are skipped (and listed), so a bad piece can't break a floor.
+ * The Mines' saved pieces, from {@code data/deepmines/structure/mines/} in the mod and data packs, sorted into pools by
+ * the start of their file names. The mod itself only has the start hall and the cap: rooms and corridors are carved
+ * fresh ({@link RoomCarver}), but hand-built ones put here (by a data pack, say) are mixed in. Pieces of the wrong size
+ * are skipped (and listed), so a bad piece can't break a floor.
  */
 public final class MinesPieces {
     /** The folder the Mines' pieces live in, inside {@code data/deepmines/structure/}. */
@@ -54,6 +56,11 @@ public final class MinesPieces {
 
         public boolean room() {
             return room;
+        }
+
+        /** Whether pieces of this kind are carved fresh by {@link RoomCarver}, rather than only loaded. */
+        public boolean carved() {
+            return this != START && this != CAP;
         }
 
         /** The size every piece of this kind must be. */
@@ -120,10 +127,9 @@ public final class MinesPieces {
         return skipped;
     }
 
-    /** The pieces of a kind; a kind of room with none of its own uses the common rooms. */
+    /** The pieces of a kind. Carved kinds usually have none: any there are are hand-built, mixed in with the carved ones. */
     public List<ResourceLocation> pool(Kind kind) {
-        List<ResourceLocation> pool = pools.getOrDefault(kind, List.of());
-        return pool.isEmpty() && kind.room() && kind != Kind.START ? pools.getOrDefault(Kind.COMMON, List.of()) : pool;
+        return pools.getOrDefault(kind, List.of());
     }
 
     public ResourceLocation pick(Kind kind, RandomSource random) {

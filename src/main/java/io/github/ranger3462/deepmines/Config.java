@@ -40,6 +40,12 @@ public final class Config {
             .comment("Infested rooms, held by mobs from spawners.")
             .defineInRange("infested", 20, 0, 1000);
 
+    public static final ModConfigSpec.IntValue HAND_BUILT = BUILDER
+            .comment("Rooms and corridors are carved fresh for every floor. If a data pack adds hand-built ones (in",
+                    "data/deepmines/structure/mines/, named by kind, such as quarry_big_pit.nbt), this is the percent chance one",
+                    "of them is used instead, for a kind that has any.")
+            .defineInRange("handBuilt", 25, 0, 100);
+
     static {
         BUILDER.pop();
     }
