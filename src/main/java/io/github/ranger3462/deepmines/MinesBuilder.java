@@ -44,7 +44,7 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
  * Turns a floor's layout (from Dungeon Delving's generator) into the Mines' pieces in the world: a room per cell, a
  * corridor per connection and a cap in every doorway with no corridor. Rooms and corridors are carved fresh, each from
  * its own seed ({@link RoomCarver}), unless a hand-built one is picked instead. Then each piece's ore spots become ore
- * from the floor's table, and its spawners get their mobs. A room or corridor is deepslate, with deepslate ore, as
+ * from the floor's table (one ore for the whole of a vein room), and its spawners get their mobs. A room or corridor is deepslate, with deepslate ore, as
  * often as its floor's depth says ({@link OreTable#deepslateChance}).
  */
 public final class MinesBuilder {
@@ -199,8 +199,10 @@ public final class MinesBuilder {
             template.filterBlocks(pos, settings, Blocks.SPAWNER).forEach(info -> spawners.add(info.pos().immutable()));
         }
 
+        // A vein room's ore is all one kind; everywhere else, each vein's is picked on its own.
+        OreTable.Ore only = placement.kind() == Kind.VEIN ? OreTable.pick(floor, random) : null;
         for (List<BlockPos> vein : veins(spots)) {
-            Block ore = OreTable.pick(floor, random).block(deep);
+            Block ore = (only != null ? only : OreTable.pick(floor, random)).block(deep);
             BlockState state = ore == Blocks.AIR ? (deep ? Blocks.DEEPSLATE : Blocks.STONE).defaultBlockState() : ore.defaultBlockState();
             vein.forEach(spot -> level.setBlock(spot, state, Block.UPDATE_CLIENTS));
         }

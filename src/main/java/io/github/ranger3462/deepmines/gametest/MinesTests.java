@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -240,7 +241,7 @@ public class MinesTests {
 
     /**
      * Carves {@link #CARVINGS} of every kind of room and corridor, and every one keeps the rules a floor relies on
-     * ({@link RoomCarver#problems}). Common rooms have the usual amount of ore, quarries far more, corridors a little;
+     * ({@link RoomCarver#problems}). Common rooms have the usual amount of ore, quarries far more, vein rooms more, corridors a little;
      * few need carving again, and hardly any need walkways.
      */
     @GameTest(template = EMPTY)
@@ -280,6 +281,8 @@ public class MinesTests {
         double common = ore.get(Kind.COMMON).stream().mapToInt(Integer::intValue).average().orElse(0);
         double quarry = ore.get(Kind.QUARRY).stream().mapToInt(Integer::intValue).average().orElse(0);
         helper.assertTrue(common > 300 && quarry > common * 1.5, "quarries should have far more ore than common rooms: " + common + ", " + quarry);
+        double vein = ore.get(Kind.VEIN).stream().mapToInt(Integer::intValue).average().orElse(0);
+        helper.assertTrue(vein > common * 1.2, "vein rooms should have more ore than common rooms: " + common + ", " + vein);
         helper.assertTrue(ore.get(Kind.COMMON).stream().allMatch(n -> n > 200), "every common room has a fair bit of ore: " + ore.get(Kind.COMMON));
         helper.assertTrue(ore.get(Kind.TUNNEL).stream().allMatch(n -> n < 30)
                 && ore.get(Kind.TUNNEL).stream().mapToInt(Integer::intValue).average().orElse(0) > 3, "corridors have a little ore: " + ore.get(Kind.TUNNEL));
@@ -363,7 +366,7 @@ public class MinesTests {
     private static void checkTunnel(ServerLevel level, BlockPos corner, String name, List<String> problems) {
         int lo = TUNNEL_WALL;
         int hi = TUNNEL_WIDTH - 1 - TUNNEL_WALL;
-        int roof = TUNNEL_WALL + DOOR_HEIGHT - 1;
+        int roof = TUNNEL_ROOF;
         forEach(corner, Kind.TUNNEL.size(), (pos, x, y, z) -> {
             boolean passage = x >= lo && x <= hi && y >= TUNNEL_WALL && y <= roof;
             if (!passage && !solid(level, pos)) {
@@ -372,7 +375,7 @@ public class MinesTests {
             if (passage && (z == 0 || z == TUNNEL_LENGTH - 1) && !clear(level, pos)) {
                 problems.add(name + ": a blocked end at " + x + "," + y + "," + z);
             }
-            if (x == TUNNEL_WIDTH / 2 && y >= TUNNEL_WALL && y < roof - 1 && !level.getBlockState(pos).getCollisionShape(level, pos).isEmpty()) {
+            if (x == TUNNEL_WIDTH / 2 && y >= TUNNEL_WALL && y < roof && !level.getBlockState(pos).getCollisionShape(level, pos).isEmpty()) {
                 problems.add(name + ": the walkway is blocked at " + x + "," + y + "," + z);
             }
         });
@@ -397,7 +400,7 @@ public class MinesTests {
     /**
      * A carved room placed on a deep floor keeps the rules in the world too, with its stone turned to deepslate (and
      * tuff) and its ore to the deepslate kind; its ore spots all become ore, and its spawners get undead to spawn. A
-     * corridor keeps its rules, and turned to run east-west, stays open at both ends.
+     * corridor keeps its rules, and turned to run east-west, stays open at both ends. A vein room's ore is all one kind.
      */
     @GameTest(template = EMPTY, timeoutTicks = 200)
     public static void carvedPiecesArePlacedWithTheirOre(GameTestHelper helper) {
@@ -435,8 +438,8 @@ public class MinesTests {
         checkTunnel(level, corner, "tunnel", problems);
         clear(level, corner, Kind.TUNNEL.size());
         MinesBuilder.place(level, Placement.carved(Kind.TUNNEL, corner, Rotation.CLOCKWISE_90, 5, Set.of()), 1, RandomSource.create(5));
-        for (int across = TUNNEL_WALL; across < TUNNEL_WALL + DOOR_WIDTH; across++) {
-            for (int y = TUNNEL_WALL; y < TUNNEL_WALL + DOOR_HEIGHT; y++) {
+        for (int across = TUNNEL_WALL; across < TUNNEL_WIDTH - TUNNEL_WALL; across++) {
+            for (int y = TUNNEL_WALL; y <= TUNNEL_ROOF; y++) {
                 for (int x : new int[] { 0, TUNNEL_LENGTH - 1 }) {
                     if (!clear(level, corner.offset(x, y, across))) {
                         problems.add("the turned tunnel is blocked at its end at " + x + "," + y + "," + across);
@@ -445,6 +448,21 @@ public class MinesTests {
             }
         }
         clear(level, corner, new Vec3i(TUNNEL_LENGTH, TUNNEL_HEIGHT, TUNNEL_WIDTH));
+
+        // A vein room's ore is all of one kind.
+        MinesBuilder.place(level, Placement.carved(Kind.VEIN, corner, Rotation.NONE, 7, EnumSet.of(Direction.SOUTH)), 30, RandomSource.create(7));
+        checkRoom(level, corner, Kind.VEIN, "vein", problems);
+        Set<Block> veinOres = new HashSet<>();
+        forEach(corner, Kind.VEIN.size(), (pos, x, y, z) -> {
+            var state = level.getBlockState(pos);
+            if (state.is(Tags.Blocks.ORES)) {
+                veinOres.add(state.getBlock());
+            }
+        });
+        if (veinOres.size() != 1) {
+            problems.add("a vein room should have one ore, not " + veinOres);
+        }
+        clear(level, corner, Kind.VEIN.size());
 
         helper.assertTrue(problems.isEmpty(), problems.size() + " problems, first: " + problems.stream().limit(3).toList());
         helper.assertTrue(counts[0] == 0 && counts[1] > 10000, "floor 100 is deepslate and tuff: " + counts[0] + " stone, " + counts[1] + " deepslate");
