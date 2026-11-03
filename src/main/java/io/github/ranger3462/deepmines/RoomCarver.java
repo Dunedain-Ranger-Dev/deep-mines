@@ -171,9 +171,10 @@ public final class RoomCarver {
     }
 
     /**
-     * The ways in, the main chamber (off the middle by up to {@code drift}), and a few smaller ones running off it.
+     * The ways in, the main chamber (off the middle by up to {@code drift}), and a few smaller ones running off it, on a
+     * floor that rises and falls by up to {@code rough} blocks.
      */
-    private static void cave(MinesGrid g, Random random, double radius, double height, int alcoves, int drift) {
+    private static void cave(MinesGrid g, Random random, double radius, double height, int alcoves, int drift, int rough) {
         passages(g, random);
         int cx = MID + between(random, -drift, drift);
         int cz = MID + between(random, -drift, drift);
@@ -185,7 +186,7 @@ public final class RoomCarver {
             int az = (int) Math.round(cz + Math.sin(angle) * d);
             chamber(g, random, Math.max(9, Math.min(MAX - 9, ax)), Math.max(9, Math.min(MAX - 9, az)), 4 + random.nextInt(4), 2 + random.nextInt(4));
         }
-        terrain(g, random, 3);
+        terrain(g, random, rough);
     }
 
     /**
@@ -363,13 +364,14 @@ public final class RoomCarver {
     /**
      * The room's rail line: from each doorway with a corridor, straight in to the middle along the doorway's center,
      * where the lines meet (on a curve, if two meet at a corner). Its bed is laid in planks wherever there's no floor
-     * (a trestle over a pit or pool), with room to walk beside it.
+     * (a trestle over a pit or pool, standing on posts down its edges every 4 blocks), with room to walk beside it.
      */
     private static void railLine(MinesGrid g, Set<Direction> openings) {
         if (openings.isEmpty()) {
             return;
         }
         BlockState planks = Blocks.SPRUCE_PLANKS.defaultBlockState();
+        BlockState post = Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState();
         for (Direction side : openings) {
             RailShape shape = side.getAxis() == Direction.Axis.Z ? RailShape.NORTH_SOUTH : RailShape.EAST_WEST;
             for (int depth = 0; depth <= MID; depth++) {
@@ -377,6 +379,9 @@ public final class RoomCarver {
                     int[] p = fromWall(side, across, depth);
                     if (depth > 0 && g.passable(p[0], WALK_Y, p[1])) {
                         g.put(p[0], WALK_Y, p[1], planks);
+                        for (int y = WALK_Y - 1; across != MID && depth % 4 == 0 && g.open(p[0], y, p[1]); y--) {
+                            g.put(p[0], y, p[1], post);
+                        }
                     }
                     for (int y = WALK_Y + 1; y <= WALK_Y + 3 && depth > 0; y++) {
                         g.setType(p[0], y, p[1], AIR);
@@ -871,7 +876,7 @@ public final class RoomCarver {
      */
     private static MinesGrid common(Random random, boolean up) {
         MinesGrid g = room(random);
-        cave(g, random, between(random, 10, 15), up ? between(random, 3, 5) : between(random, 6, 10), between(random, 3, 7), 4);
+        cave(g, random, between(random, 10, 15), up ? between(random, 3, 5) : between(random, 6, 10), between(random, 3, 7), 4, 3);
         drifts(g, random, between(random, 1, 3), true, up);
         smoothRoof(g);
         int main = between(random, 65, 85);
@@ -893,7 +898,7 @@ public final class RoomCarver {
      */
     private static MinesGrid quarry(Random random) {
         MinesGrid g = room(random);
-        cave(g, random, between(random, 16, 18), between(random, 9, 13), between(random, 2, 4), 1);
+        cave(g, random, between(random, 16, 18), between(random, 9, 13), between(random, 2, 4), 1, 0);
         int steps = between(random, 4, 5);
         int widest = between(random, 13, 15);
         BlockState ladder = Blocks.LADDER.defaultBlockState().setValue(LadderBlock.FACING, Direction.WEST);
@@ -956,7 +961,7 @@ public final class RoomCarver {
      */
     private static MinesGrid flooded(Random random) {
         MinesGrid g = room(random);
-        cave(g, random, between(random, 14, 16), between(random, 7, 11), between(random, 3, 5), 2);
+        cave(g, random, between(random, 14, 16), between(random, 7, 11), between(random, 3, 5), 2, 3);
         int cx = MID + between(random, -3, 3);
         int cz = MID + between(random, -3, 3);
         double p1 = random.nextDouble() * Math.PI * 2;
@@ -1057,7 +1062,7 @@ public final class RoomCarver {
      */
     private static MinesGrid infested(Random random) {
         MinesGrid g = room(random);
-        cave(g, random, between(random, 12, 14), between(random, 5, 9), between(random, 3, 7), 2);
+        cave(g, random, between(random, 12, 14), between(random, 5, 9), between(random, 3, 7), 2, 3);
         drifts(g, random, between(random, 0, 2), false, false);
         smoothRoof(g);
         veins(g, random, between(random, 60, 80), 2, WALK_Y - 1, 4, 9);
