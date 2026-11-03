@@ -208,9 +208,6 @@ public class MinePieceProvider implements DataProvider {
             g.put(x, beamY, lz + 1, beamX);
             g.put(x, beamY, lz, beamX);
         }
-        for (int y = START_FLOOR_Y + 3; y < beamY; y++) {
-            g.put(lx, y, lz, Blocks.CHAIN);
-        }
         BlockState rail = Blocks.RAIL.defaultBlockState().setValue(RailBlock.SHAPE, RailShape.EAST_WEST);
         for (int x = lx - 6; x <= lx - 2; x++) {
             g.put(x, START_FLOOR_Y, lz, rail);

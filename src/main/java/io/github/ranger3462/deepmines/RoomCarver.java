@@ -103,11 +103,14 @@ public final class RoomCarver {
         return g;
     }
 
-    /** The last of a room: its rail line, no rails left hanging, chains hung from rock, and every vein of ore shown or leading to one that is. */
+    /**
+     * The last of a room: its rail line, no rails left hanging, every hanging lantern on a chain up to the roof, and
+     * every vein of ore shown or leading to one that is.
+     */
     private static void finish(MinesGrid g, Random random, Set<Direction> openings) {
-        railLine(g, openings);
+        railLine(g, random, openings);
         dropUnsupportedRails(g);
-        hangChains(g);
+        hangLanterns(g);
         showOre(g, random);
     }
 
@@ -461,17 +464,18 @@ public final class RoomCarver {
      * way, a trestle where there's no floor (over a pit or pool, standing on posts down its edges every 4 blocks), with
      * room to walk beside it.
      */
-    private static void railLine(MinesGrid g, Set<Direction> openings) {
+    private static void railLine(MinesGrid g, Random random, Set<Direction> openings) {
         if (openings.isEmpty()) {
             return;
         }
-        BlockState planks = Blocks.SPRUCE_PLANKS.defaultBlockState();
         BlockState post = Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState();
-        // The junction: a plank platform 7 across, clear over it, with a lantern on a post at each corner (and the post
-        // run down to the ground, where it stands over a pit).
+        // The junction: a plank platform 7 across, framed in stripped logs, clear over it, with a lantern on a post at
+        // each corner (and the post run down to the ground, where it stands over a pit).
         for (int x = MID - 3; x <= MID + 3; x++) {
             for (int z = MID - 3; z <= MID + 3; z++) {
-                g.put(x, WALK_Y, z, planks);
+                boolean edgeX = Math.abs(x - MID) == 3;
+                boolean edgeZ = Math.abs(z - MID) == 3;
+                g.put(x, WALK_Y, z, edgeX || edgeZ ? post.setValue(RotatedPillarBlock.AXIS, edgeX ? Direction.Axis.Z : Direction.Axis.X) : planks(random));
                 for (int y = WALK_Y + 1; y <= WALK_Y + 3; y++) {
                     g.setType(x, y, z, AIR);
                 }
@@ -492,8 +496,8 @@ public final class RoomCarver {
                 for (int across = MID - 1; across <= MID + 1; across++) {
                     int[] p = fromWall(side, across, depth);
                     boolean gap = g.passable(p[0], WALK_Y, p[1]);
-                    if (depth > 0) {
-                        g.put(p[0], WALK_Y, p[1], planks);
+                    if (depth > 0 && depth < MID - 3) {
+                        g.put(p[0], WALK_Y, p[1], bed(random, depth, side.getClockWise().getAxis()));
                     }
                     for (int y = WALK_Y - 1; gap && depth > 0 && across != MID && depth % 4 == 0 && g.open(p[0], y, p[1]); y--) {
                         g.put(p[0], y, p[1], post);
@@ -536,17 +540,37 @@ public final class RoomCarver {
         }
     }
 
-    /** Runs every chain whose top hangs in the open on up until it meets something solid to hang from. */
-    private static void hangChains(MinesGrid g) {
+    /** Hangs every hanging lantern with open air over it on a chain, up to whatever is over it. */
+    private static void hangLanterns(MinesGrid g) {
         for (int x = 0; x < g.sx; x++) {
             for (int z = 0; z < g.sz; z++) {
                 for (int y = 0; y < g.sy - 1; y++) {
-                    if (g.block(x, y, z).is(Blocks.CHAIN) && g.air(x, y + 1, z)) {
+                    BlockState block = g.block(x, y, z);
+                    boolean hung = block.is(Blocks.CHAIN) || block.is(Blocks.LANTERN) && block.getValue(LanternBlock.HANGING);
+                    if (hung && g.air(x, y + 1, z)) {
                         g.put(x, y + 1, z, Blocks.CHAIN);
                     }
                 }
             }
         }
+    }
+
+    /**
+     * A block of a track's bed, {@code along} it: a sleeper (a stripped spruce log lying across the track, along
+     * {@code across}) every other block, otherwise planks, mostly spruce, some darker or paler, old boards patched in.
+     */
+    private static BlockState bed(Random random, int along, Direction.Axis across) {
+        if (Math.floorMod(along, 2) == 0) {
+            return Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState().setValue(RotatedPillarBlock.AXIS, across);
+        }
+        return planks(random);
+    }
+
+    /** Old planks: mostly spruce, some dark oak, now and then oak or a stripped log's end. */
+    private static BlockState planks(Random random) {
+        int roll = random.nextInt(20);
+        return (roll < 13 ? Blocks.SPRUCE_PLANKS : roll < 17 ? Blocks.DARK_OAK_PLANKS : roll < 19 ? Blocks.OAK_PLANKS : Blocks.STRIPPED_SPRUCE_WOOD)
+                .defaultBlockState();
     }
 
     // --- Ore that shows ---
@@ -862,7 +886,7 @@ public final class RoomCarver {
             int[] mid = at(alongX, a, line);
             if (random.nextInt(4) != 0) {
                 g.put(mid[0], WALK_Y + 1, mid[1], rail);
-                g.put(mid[0], WALK_Y, mid[1], Blocks.SPRUCE_PLANKS);
+                g.put(mid[0], WALK_Y, mid[1], bed(random, a, alongX ? Direction.Axis.Z : Direction.Axis.X));
             }
             int step = (a - start) * dir;
             boolean nearEnd = (end - a) * dir < 2;
@@ -898,7 +922,7 @@ public final class RoomCarver {
         int[] ladderAt = at(alongX, end, line);
         int[][] hole = { at(alongX, end, line), at(alongX, end, line + 1), at(alongX, end - dir, line), at(alongX, end - dir, line + 1) };
         if (!up) {
-            // A winze: sunk down from the drift's floor, with a ladder down the face and a chain hung beside it.
+            // A winze: sunk down from the drift's floor, with a ladder down the face.
             int bottom = between(random, 5, 8);
             for (int[] h : hole) {
                 for (int y = bottom + 1; y <= WALK_Y; y++) {
@@ -907,10 +931,6 @@ public final class RoomCarver {
             }
             for (int y = bottom + 1; y <= WALK_Y + 1; y++) {
                 g.put(ladderAt[0], y, ladderAt[1], ladder);
-            }
-            int[] chain = at(alongX, end - dir, line + 1);
-            for (int y = WALK_Y - 4; y <= WALK_Y + 3; y++) {
-                g.put(chain[0], y, chain[1], Blocks.CHAIN);
             }
             // A short drive on from the bottom, beside the ladder, into the pocket of ore it was after.
             int reach = between(random, 3, 5);
@@ -1081,7 +1101,32 @@ public final class RoomCarver {
         veinsNear(g, random, between(random, 35, 45), pit, 3, 4, 9);
         veins(g, random, 10, 2, TOP - 2, 4, 9);
 
-        // Lanterns on posts out on the rim at the corners, and a chain hoist hung from the roof down into the pit.
+        // A boardwalk 3 wide round the pit's rim, with stripped logs along its edge.
+        for (int x = 2; x <= MAX - 2; x++) {
+            for (int z = 2; z <= MAX - 2; z++) {
+                if (!g.rock(x, WALK_Y, z) || !g.air(x, WALK_Y + 1, z) || inLanding(x, z)) {
+                    continue;
+                }
+                int near = 4;
+                Direction.Axis lies = Direction.Axis.X;
+                for (int dx = -3; dx <= 3; dx++) {
+                    for (int dz = -3; dz <= 3; dz++) {
+                        int d = Math.max(Math.abs(dx), Math.abs(dz));
+                        if (d < near && g.air(x + dx, WALK_Y, z + dz)) {
+                            near = d;
+                            lies = Math.abs(dx) >= Math.abs(dz) ? Direction.Axis.Z : Direction.Axis.X;
+                        }
+                    }
+                }
+                if (near == 1) {
+                    g.put(x, WALK_Y, z, Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState().setValue(RotatedPillarBlock.AXIS, lies));
+                } else if (near <= 3) {
+                    g.put(x, WALK_Y, z, planks(random));
+                }
+            }
+        }
+
+        // Lanterns on posts out on the rim at the corners.
         for (int[] c : new int[][] { { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) {
             for (int d = 10; d < 22; d++) {
                 int x = MID + c[0] * d;
@@ -1092,13 +1137,6 @@ public final class RoomCarver {
                     break;
                 }
             }
-        }
-        int roof = WALK_Y + 1;
-        while (roof < TOP && g.air(MID + 3, roof, MID - 3)) {
-            roof++;
-        }
-        for (int y = roof - 1; y >= WALK_Y - 8 && g.air(MID + 3, y, MID - 3); y--) {
-            g.put(MID + 3, y, MID - 3, Blocks.CHAIN);
         }
         decorate(g, random, 30);
         return g;
@@ -1325,7 +1363,7 @@ public final class RoomCarver {
             int[] mid = at(alongX, a, line);
             if (rails && random.nextInt(4) != 0) {
                 g.put(mid[0], WALK_Y + 1, mid[1], rail);
-                g.put(mid[0], WALK_Y, mid[1], Blocks.SPRUCE_PLANKS);
+                g.put(mid[0], WALK_Y, mid[1], bed(random, a, alongX ? Direction.Axis.Z : Direction.Axis.X));
             }
         }
         for (int a = from + dir * first; (to - a) * dir >= 2; a += dir * between(random, 4, 6)) {
@@ -1417,7 +1455,9 @@ public final class RoomCarver {
         for (int z = 0; z < TUNNEL_LENGTH; z++) {
             boolean clear = !supports.contains(z);
             g.put(MID_TUNNEL, TUNNEL_WALL, z, rail);
-            g.put(MID_TUNNEL, floor, z, Blocks.OAK_PLANKS);
+            for (int x = MID_TUNNEL - 1; x <= MID_TUNNEL + 1; x++) {
+                g.put(x, floor, z, bed(random, z, Direction.Axis.X));
+            }
             for (int x : new int[] { lo, hi }) {
                 if (clear && random.nextInt(12) == 0) {
                     g.put(x, roof, z, Blocks.COBWEB);
