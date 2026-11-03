@@ -23,6 +23,7 @@ import net.minecraft.world.level.block.MultifaceBlock;
 import net.minecraft.world.level.block.RailBlock;
 import net.minecraft.world.level.block.RotatedPillarBlock;
 import net.minecraft.world.level.block.StairBlock;
+import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.Half;
@@ -30,12 +31,13 @@ import net.minecraft.world.level.block.state.properties.RailShape;
 
 /**
  * Carves the Mines' rooms and corridors when a floor is built, each from its own seed, so no two are alike. Every
- * room starts as a block of rock and has a cave carved in it at doorway height, so there's rock below to dig down into
+ * room starts as a block of rock and has a cave (or old workings) carved in it at doorway height, so there's rock below to dig down into
  * and rock above to dig up into. Ore spots mark where veins go; they become the floor's ore as the room is placed.
  * <ul>
- * <li>Common rooms: the usual amount of ore. The "dig down" ones have it mostly under the cave's floor, the "dig up"
- * ones (with lower caves) mostly over it. Old abandoned drifts lead off the cave towards veins, and end in a shaft sunk
- * (or raised) towards more.</li>
+ * <li>Common rooms: the usual amount of ore. Half are caves: the "dig down" ones have it mostly under the cave's floor,
+ * the "dig up" ones (with lower caves) mostly over it, and old abandoned drifts lead off the cave towards veins and end
+ * in a shaft sunk (or raised) towards more. The other half are old workings like a vein room's, with ore of every
+ * kind.</li>
  * <li>Quarries: a stepped open pit, packed with ore around its walls.</li>
  * <li>Flooded rooms: a deep pool to dive into, with its ore around the pool's walls and bottom.</li>
  * <li>Infested rooms: a cave with spawners, bones and cobwebs, and the usual amount of ore.</li>
@@ -101,10 +103,11 @@ public final class RoomCarver {
         return g;
     }
 
-    /** The last of a room: its rail line, no rails left hanging, and every vein of ore shown or leading to one that is. */
+    /** The last of a room: its rail line, no rails left hanging, chains hung from rock, and every vein of ore shown or leading to one that is. */
     private static void finish(MinesGrid g, Random random, Set<Direction> openings) {
         railLine(g, openings);
         dropUnsupportedRails(g);
+        hangChains(g);
         showOre(g, random);
     }
 
@@ -415,6 +418,19 @@ public final class RoomCarver {
                 for (int z = 0; z < g.sz; z++) {
                     if (g.block(x, y, z).is(Blocks.RAIL) && !g.solid(x, y - 1, z)) {
                         g.setType(x, y, z, AIR);
+                    }
+                }
+            }
+        }
+    }
+
+    /** Runs every chain whose top hangs in the open on up until it meets something solid to hang from. */
+    private static void hangChains(MinesGrid g) {
+        for (int x = 0; x < g.sx; x++) {
+            for (int z = 0; z < g.sz; z++) {
+                for (int y = 0; y < g.sy - 1; y++) {
+                    if (g.block(x, y, z).is(Blocks.CHAIN) && g.air(x, y + 1, z)) {
+                        g.put(x, y + 1, z, Blocks.CHAIN);
                     }
                 }
             }
@@ -871,11 +887,21 @@ public final class RoomCarver {
     // --- The kinds of room ---
 
     /**
-     * A common room: a cave with the usual amount of ore. Dig-down caves are taller, with most of the ore under the
-     * floor and old shafts sunk towards it; dig-up caves are low, with most of it overhead and shafts raised towards it.
+     * A common room, with the usual amount of ore: old workings like a vein room's (half of them), or a cave. Dig-down
+     * caves are taller, with most of the ore under the floor and old shafts sunk towards it; dig-up caves are low,
+     * with most of it overhead and shafts raised towards it.
      */
     private static MinesGrid common(Random random, boolean up) {
         MinesGrid g = room(random);
+        if (random.nextBoolean()) {
+            // Old workings instead of a cave, with the usual ore of every kind in smaller veins.
+            workings(g, random, 10, 16);
+            Near workings = (x, y, z) -> y > WALK_Y;
+            veinsNear(g, random, between(random, 60, 80), workings, 3, 4, 9);
+            veins(g, random, between(random, 20, 30), 2, TOP - 2, 4, 9);
+            decorate(g, random, 30);
+            return g;
+        }
         cave(g, random, between(random, 10, 15), up ? between(random, 3, 5) : between(random, 6, 10), between(random, 3, 7), 4, 3);
         drifts(g, random, between(random, 1, 3), true, up);
         smoothRoof(g);
@@ -936,7 +962,7 @@ public final class RoomCarver {
         veinsNear(g, random, between(random, 140, 180), pit, 3, 4, 9);
         veins(g, random, 40, 2, TOP - 2, 4, 9);
 
-        // Lanterns on posts out on the rim at the corners, and a chain hoist hanging into the pit.
+        // Lanterns on posts out on the rim at the corners, and a chain hoist hung from the roof down into the pit.
         for (int[] c : new int[][] { { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) {
             for (int d = 10; d < 22; d++) {
                 int x = MID + c[0] * d;
@@ -948,7 +974,11 @@ public final class RoomCarver {
                 }
             }
         }
-        for (int y = WALK_Y - 8; y < WALK_Y && g.air(MID + 3, y, MID - 3); y++) {
+        int roof = WALK_Y + 1;
+        while (roof < TOP && g.air(MID + 3, roof, MID - 3)) {
+            roof++;
+        }
+        for (int y = roof - 1; y >= WALK_Y - 8 && g.air(MID + 3, y, MID - 3); y--) {
             g.put(MID + 3, y, MID - 3, Blocks.CHAIN);
         }
         decorate(g, random, 30);
@@ -1117,32 +1147,34 @@ public final class RoomCarver {
 
     /**
      * A mine support across a passage 7 wide, centered on {@code line}, for someone standing at {@code y}: stripped
-     * spruce legs standing on barrels, a beam across their tops leaving 5 blocks under it, and upside-down spruce stairs
-     * rounding off its inside corners (two along the beam, one down the leg). Unless {@code beside} is 0, a lantern
-     * hangs from the roof just beside the middle of the beam, that way along the passage.
+     * spruce legs standing on barrels, a beam 7 wide across their tops leaving 5 blocks under it, an upside-down spruce
+     * stair in each inside corner, and spruce trapdoors flush against the beam and the leg beside each stair. With
+     * {@code lit}, a lantern hangs from the middle of the beam.
      */
-    private static void support(MinesGrid g, boolean alongX, int along, int line, int y, int beside) {
+    private static void support(MinesGrid g, boolean alongX, int along, int line, int y, boolean lit) {
         Direction low = alongX ? Direction.NORTH : Direction.WEST;
         BlockState foot = Blocks.BARREL.defaultBlockState().setValue(BarrelBlock.FACING, Direction.UP);
         BlockState leg = Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState();
         BlockState beam = leg.setValue(RotatedPillarBlock.AXIS, alongX ? Direction.Axis.Z : Direction.Axis.X);
         BlockState brace = Blocks.SPRUCE_STAIRS.defaultBlockState().setValue(StairBlock.HALF, Half.TOP);
+        BlockState trapdoor = Blocks.SPRUCE_TRAPDOOR.defaultBlockState();
         for (int s : new int[] { -1, 1 }) {
-            BlockState toLeg = brace.setValue(StairBlock.FACING, s < 0 ? low : low.getOpposite());
+            Direction toLeg = s < 0 ? low : low.getOpposite();
             put(g, alongX, along, line + 3 * s, y, foot);
             for (int h = 1; h <= 4; h++) {
                 put(g, alongX, along, line + 3 * s, y + h, leg);
             }
-            put(g, alongX, along, line + 2 * s, y + 3, toLeg);
-            put(g, alongX, along, line + 2 * s, y + 4, toLeg);
-            put(g, alongX, along, line + s, y + 4, toLeg);
+            put(g, alongX, along, line + 2 * s, y + 4, brace.setValue(StairBlock.FACING, toLeg));
+            // Under the beam, shut and up against it; down the leg, open and against it (an open trapdoor lies on the
+            // side away from where it faces).
+            put(g, alongX, along, line + s, y + 4, trapdoor.setValue(TrapDoorBlock.HALF, Half.TOP));
+            put(g, alongX, along, line + 2 * s, y + 3, trapdoor.setValue(TrapDoorBlock.OPEN, true).setValue(TrapDoorBlock.FACING, toLeg.getOpposite()));
         }
         for (int across = line - 3; across <= line + 3; across++) {
             put(g, alongX, along, across, y + 5, beam);
         }
-        int[] p = at(alongX, along + beside, line);
-        if (beside != 0 && g.air(p[0], y + 5, p[1]) && g.solidRock(p[0], y + 6, p[1])) {
-            g.put(p[0], y + 5, p[1], Blocks.LANTERN.defaultBlockState().setValue(LanternBlock.HANGING, true));
+        if (lit) {
+            put(g, alongX, along, line, y + 4, Blocks.LANTERN.defaultBlockState().setValue(LanternBlock.HANGING, true));
         }
     }
 
@@ -1151,9 +1183,9 @@ public final class RoomCarver {
         g.put(p[0], y, p[1], state);
     }
 
-    /** Which way along a passage a support's lantern hangs: either, or 0 for none (a quarter of them). */
-    private static int lanternSide(Random random) {
-        return random.nextInt(4) == 0 ? 0 : random.nextBoolean() ? 1 : -1;
+    /** Whether a support has a lantern: most do. */
+    private static boolean lit(Random random) {
+        return random.nextInt(4) != 0;
     }
 
     /**
@@ -1177,18 +1209,28 @@ public final class RoomCarver {
             }
         }
         for (int a = from + dir * first; (to - a) * dir >= 2; a += dir * between(random, 4, 6)) {
-            support(g, alongX, a, line, WALK_Y + 1, lanternSide(random));
+            support(g, alongX, a, line, WALK_Y + 1, lit(random));
         }
     }
 
     /**
-     * A vein room: no cave, but old workings driven through the rock after one ore. Timbered galleries run in from every
-     * doorway to a hall in the middle, and crosscuts off them (one to a quarter of the room) each end at a vein. All of
-     * it is in very large veins, showing in the galleries' walls and roofs, and all of one ore, picked when the floor
-     * is built.
+     * A vein room: no cave, but old workings driven through the rock after one ore, in very large veins showing in the
+     * galleries' walls and roofs, all of one ore, picked when the floor is built.
      */
     private static MinesGrid veinRoom(Random random) {
         MinesGrid g = room(random);
+        workings(g, random, 40, 70);
+        Near workings = (x, y, z) -> y > WALK_Y;
+        veinsNear(g, random, between(random, 13, 17), workings, 2, 50, 90);
+        decorate(g, random, 30);
+        return g;
+    }
+
+    /**
+     * Old workings: timbered galleries in from every doorway to a hall in the middle, and crosscuts off them (one to a
+     * quarter of the room) each ending at a vein of {@code faceMin} to {@code faceMax} ore.
+     */
+    private static void workings(MinesGrid g, Random random, int faceMin, int faceMax) {
         int hall = between(random, 4, 6);
         forBox(MID - hall, WALK_Y + 1, MID - hall, MID + hall, WALK_Y + 6, MID + hall, g::carve);
         for (Direction side : Direction.Plane.HORIZONTAL) {
@@ -1209,17 +1251,12 @@ public final class RoomCarver {
             int length = between(random, 6, 12);
             gallery(g, random, alongX, line, MID + dir * 4, MID + dir * (3 + length), 2, true);
             int[] face = at(alongX, MID + dir * (5 + length), line);
-            vein(g, random, face[0], WALK_Y + between(random, 2, 4), face[1], between(random, 40, 70));
+            vein(g, random, face[0], WALK_Y + between(random, 2, 4), face[1], between(random, faceMin, faceMax));
         }
-        Near workings = (x, y, z) -> y > WALK_Y;
-        veinsNear(g, random, between(random, 13, 17), workings, 2, 50, 90);
-
         // Lanterns hung in the hall's corners.
         for (int[] c : new int[][] { { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) {
             g.put(MID + c[0] * (hall - 1), WALK_Y + 6, MID + c[1] * (hall - 1), Blocks.LANTERN.defaultBlockState().setValue(LanternBlock.HANGING, true));
         }
-        decorate(g, random, 30);
-        return g;
     }
 
     /**
@@ -1255,10 +1292,7 @@ public final class RoomCarver {
         List<Integer> supports = new ArrayList<>();
         for (int z = between(random, 1, 3); z < TUNNEL_LENGTH - 1; z += between(random, 4, 6)) {
             supports.add(z);
-            // The lantern hangs beside the beam, never in the open ends.
-            int beside = lanternSide(random);
-            beside = z + beside <= 0 || z + beside >= TUNNEL_LENGTH - 1 ? -beside : beside;
-            support(g, false, z, MID_TUNNEL, TUNNEL_WALL, beside);
+            support(g, false, z, MID_TUNNEL, TUNNEL_WALL, lit(random));
         }
         for (int z = 0; z < TUNNEL_LENGTH; z++) {
             boolean clear = !supports.contains(z);
@@ -1395,8 +1429,8 @@ public final class RoomCarver {
                     if (passage && (z == 0 || z == g.sz - 1) && !g.clear(x, y, z)) {
                         problems.add("a blocked end at " + x + "," + y + "," + z);
                     }
-                    // Clear to walk down the middle, all the way up to the beams.
-                    if (x == MID_TUNNEL && y >= TUNNEL_WALL && y < roof && !g.passable(x, y, z)) {
+                    // Clear to walk down the middle, up to the lanterns hung under the beams.
+                    if (x == MID_TUNNEL && y >= TUNNEL_WALL && y < roof - 1 && !g.passable(x, y, z)) {
                         problems.add("the walkway is blocked at " + x + "," + y + "," + z);
                     }
                 }

@@ -36,10 +36,11 @@ A living space where players go to gather resources on a more frequent schedule 
   carved fresh when a floor is built, each from its own seed (`RoomCarver`), so no two are alike. The kinds (how often
   each comes up is a setting, a weight; a floor's first room is always common). A cave's floor rises and falls up to
   3 blocks, but stays level along the rail line, and its roof is smoothed of notches and slots:
-  - `common_` (50): the usual amount of ore. "Dig down" rooms have it mostly under the cave's floor, "dig up" rooms
-    (with lower caves) mostly overhead. Old abandoned drifts lead off the cave towards veins and end in a shaft sunk
-    or raised towards more, showing where to dig.
-  - `quarry_` (15): a stepped open pit, packed with ore around its walls.
+  - `common_` (50): the usual amount of ore. Half are caves: "dig down" ones have it mostly under the cave's floor,
+    "dig up" ones (with lower caves) mostly overhead, and old abandoned drifts lead off the cave towards veins and end
+    in a shaft sunk or raised towards more, showing where to dig. The other half are old workings laid out like a vein
+    room's, with ore of every kind in ordinary veins.
+  - `quarry_` (15): a stepped open pit, packed with ore around its walls. Its floor stays flat round the rim.
   - `flooded_` (15): a deep pool, level with the floor, to dive into; its ore is around the pool's walls and bottom.
   - `infested_` (20): spawners (zombies and skeletons until MINE-25 picks the Mines' own mobs), bones and cobwebs,
     and the usual amount of ore.
@@ -48,8 +49,8 @@ A living space where players go to gather resources on a more frequent schedule 
     picked from the floor's table when the floor is built. About 40% more ore than a common room.
   - `tunnel_`: corridors, 11 x 10 x 31: a timbered mineshaft with a passage 7 wide and 6 high, with a little ore.
     Every 4 to 6 blocks a support: stripped spruce legs on upright barrels, a beam across their tops with 5 blocks
-    under it, upside-down spruce stairs rounding off its inside corners (two along the beam, one down each leg), and
-    usually a lantern hanging beside the middle of the beam. Vein rooms' galleries use the same supports.
+    under it (7 wide, over the legs), an upside-down spruce stair in each inside corner with spruce trapdoors flush
+    against the beam and the leg beside it, and usually a lantern hanging from the middle of the beam. Vein rooms' galleries use the same supports.
   - `cap_`: plain rock, for doorways with no corridor.
   - `start_`: the start hall.
 - **The rules every room keeps.** Sealed all round but its doorways, a landing inside each, a way to walk (or climb,
