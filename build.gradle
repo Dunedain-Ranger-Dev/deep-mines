@@ -111,6 +111,13 @@ dependencies {
         localRuntime "curse.maven:apotheosis-313970:8993983"                 // 1.21.1-8.9.0
         localRuntime "curse.maven:placebo-283644:9153039"                    // 1.21.1-9.9.4
         localRuntime "curse.maven:apothic-attributes-898963:9006294"         // 1.21.1-2.11.0
+        // Iron's Spells and its libraries, for Dungeon Delving's spellcasting mobs (it only compiles against them, but
+        // its mobs need them loaded at runtime). Versions match Dungeon Delving's and the pack's.
+        localRuntime "curse.maven:irons-spells-n-spellbooks-855414:8680204"  // 1.21.1-3.16.3
+        localRuntime "curse.maven:irons-lib-1492763:8973642"                 // 1.21.1-2.2.0
+        localRuntime "curse.maven:playeranimator-658587:7389814"             // 2.0.4+1.21.1
+        localRuntime "curse.maven:geckolib-388172:8893490"                   // 4.9.3
+        localRuntime "curse.maven:curios-309927:6529130"                     // 9.5.1+1.21.1
     }
 }
 
