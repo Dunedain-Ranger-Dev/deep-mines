@@ -1,5 +1,7 @@
 package io.github.ranger3462.deepmines;
 
+import java.util.List;
+
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 /** Settings in {@code config/deepmines-common.toml}. */
@@ -49,6 +51,13 @@ public final class Config {
     static {
         BUILDER.pop();
     }
+
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> INFESTED_MOBS = BUILDER
+            .comment("The mobs infested rooms' spawners spawn, by depth: \"mob=weight@tiers\" entries, as in Dungeon Delving's",
+                    "faction mobs. A mob is an entity id or an entity tag (#mod:tag); the tiers are of 25 floors each (1 is floors",
+                    "1 to 25, 4 is 76 and below). Each spawner sends one wave of its mob the first time someone comes near, then",
+                    "breaks. Mobs from mods that aren't installed are skipped.")
+            .defineListAllowEmpty("infestedMobs", MinesMobs.DEFAULT_INFESTED, () -> "", entry -> entry instanceof String);
 
     static final ModConfigSpec SPEC = BUILDER.build();
 

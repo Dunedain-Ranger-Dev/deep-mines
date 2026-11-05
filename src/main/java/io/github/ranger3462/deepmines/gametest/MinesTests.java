@@ -27,6 +27,7 @@ import io.github.ranger3462.deepmines.MinesBuilder.Placement;
 import io.github.ranger3462.deepmines.MinesFloors;
 import io.github.ranger3462.deepmines.MinesFloorsData;
 import io.github.ranger3462.deepmines.MinesGrid;
+import io.github.ranger3462.deepmines.MinesMobs;
 import io.github.ranger3462.deepmines.MinesPieces;
 import io.github.ranger3462.deepmines.MinesPieces.Kind;
 import io.github.ranger3462.deepmines.MinesPortal;
@@ -35,6 +36,7 @@ import io.github.ranger3462.deepmines.ModBlocks;
 import io.github.ranger3462.deepmines.OreTable;
 import io.github.ranger3462.deepmines.OreTable.Ore;
 import io.github.ranger3462.deepmines.RoomCarver;
+import io.github.ranger3462.dungeondelving.dungeon.SpawnerWaves;
 import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonLayout.Cell;
 import net.kyrptonaught.customportalapi.CustomPortalApiRegistry;
 import net.kyrptonaught.customportalapi.util.PortalLink;
@@ -52,7 +54,13 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobCategory;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.projectile.Projectile;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.Block;
@@ -67,6 +75,7 @@ import net.minecraft.world.level.levelgen.placement.PlacementContext;
 import net.minecraft.world.level.levelgen.structure.templatesystem.LiquidSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
+import net.minecraft.world.phys.AABB;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.common.Tags;
 import net.neoforged.neoforge.common.util.FakePlayerFactory;
@@ -436,7 +445,8 @@ public class MinesTests {
 
     /**
      * A carved room placed on a deep floor keeps the rules in the world too, with its stone turned to deepslate (and
-     * tuff) and its ore to the deepslate kind; its ore spots all become ore, and its spawners get undead to spawn. A
+     * tuff) and its ore to the deepslate kind; its ore spots all become ore, and its spawners become wave spawners of
+     * the deepest tier's mobs (or, now and then with Mowzie's Mobs, it's a Wroughtnaut's hall instead). A
      * corridor keeps its rules, and turned to run east-west, stays open at both ends. A vein room's ore is all one kind.
      */
     @GameTest(template = EMPTY, timeoutTicks = 200)
@@ -444,7 +454,8 @@ public class MinesTests {
         ServerLevel level = helper.getLevel();
         BlockPos corner = helper.absolutePos(BlockPos.ZERO).above(150);
         MinesBuilder.place(level, Placement.carved(Kind.INFESTED, corner, Rotation.NONE, 3, EnumSet.of(Direction.NORTH, Direction.EAST)), 100, RandomSource.create(3));
-        int[] counts = new int[4]; // stone, deepslate, ores, spawners with undead
+        int[] counts = new int[4]; // stone, deepslate, ores, wave spawners of the deepest mobs
+        Set<String> deepest = mobsOf(level, 100);
         List<String> problems = new ArrayList<>();
         checkRoom(level, corner, Kind.INFESTED, "infested", problems);
         forEach(corner, Kind.INFESTED.size(), (pos, x, y, z) -> {
@@ -462,13 +473,16 @@ public class MinesTests {
                 }
             } else if (state.is(Blocks.SPAWNER) && level.getBlockEntity(pos) instanceof SpawnerBlockEntity spawner) {
                 String mob = spawner.getSpawner().save(new CompoundTag()).getCompound("SpawnData").getCompound("entity").getString("id");
-                if (mob.equals("minecraft:zombie") || mob.equals("minecraft:skeleton")) {
+                if (deepest.contains(mob) && SpawnerWaves.isWaveSpawner(level, pos)) {
                     counts[3]++;
                 } else {
                     problems.add("a spawner of '" + mob + "'");
                 }
             }
         });
+        List<Mob> halls = level.getEntitiesOfClass(Mob.class, AABB.of(Placement.carved(Kind.INFESTED, corner, Rotation.NONE, 3, Set.of()).box()));
+        boolean hall = halls.stream().anyMatch(mob -> EntityType.getKey(mob.getType()).equals(MinesMobs.WROUGHTNAUT));
+        halls.forEach(Entity::discard);
         clear(level, corner, Kind.INFESTED.size());
 
         MinesBuilder.place(level, Placement.carved(Kind.TUNNEL, corner, Rotation.NONE, 5, Set.of()), 1, RandomSource.create(5));
@@ -503,8 +517,158 @@ public class MinesTests {
 
         helper.assertTrue(problems.isEmpty(), problems.size() + " problems, first: " + problems.stream().limit(3).toList());
         helper.assertTrue(counts[0] == 0 && counts[1] > 10000, "floor 100 is deepslate and tuff: " + counts[0] + " stone, " + counts[1] + " deepslate");
-        helper.assertTrue(counts[2] > 150 && counts[3] >= 2, counts[2] + " ore, " + counts[3] + " spawners of undead");
+        helper.assertTrue(counts[2] > 150 && (counts[3] >= 2 || hall), counts[2] + " ore, " + counts[3] + " wave spawners of the deepest mobs");
         helper.succeed();
+    }
+
+    /** The installed mobs infested rooms can have on a floor. */
+    private static Set<String> mobsOf(ServerLevel level, int floor) {
+        Set<String> mobs = new HashSet<>();
+        RandomSource random = RandomSource.create(floor);
+        for (int i = 0; i < 500; i++) {
+            MinesMobs.pick(level, floor, random).ifPresent(type -> mobs.add(EntityType.getKey(type).toString()));
+        }
+        return mobs;
+    }
+
+    /**
+     * The deeper the floor, the older and darker what holds it: kobolds and vermin near the top, goblins below them,
+     * then the restless dead. Mobs from mods that aren't here are left out.
+     */
+    @GameTest(template = EMPTY)
+    public static void infestedMobsGoDeeper(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        helper.assertTrue(MinesMobs.tier(1) == 1 && MinesMobs.tier(25) == 1 && MinesMobs.tier(26) == 2 && MinesMobs.tier(51) == 3
+                && MinesMobs.tier(76) == 4 && MinesMobs.tier(100) == 4 && MinesMobs.tier(500) == 4, "tiers of 25 floors");
+        Set<String> top = mobsOf(level, 10);
+        Set<String> middle = mobsOf(level, 40);
+        Set<String> deep = mobsOf(level, 60);
+        Set<String> deepest = mobsOf(level, 90);
+        helper.assertTrue(top.contains("dungeondelving:kobold_scavenger") && top.contains("minecraft:silverfish") && !top.contains("dungeondelving:goblin"),
+                "floor 10: " + top);
+        helper.assertTrue(middle.contains("dungeondelving:goblin") && !middle.contains("dungeondelving:kobold_scavenger"), "floor 40: " + middle);
+        helper.assertTrue(deep.contains("dungeondelving:skeleton_swordsman") && !deep.contains("dungeondelving:goblin"), "floor 60: " + deep);
+        helper.assertTrue(!deepest.isEmpty() && deepest.stream().noneMatch(mob -> mob.contains("kobold") || mob.contains("goblin")), "floor 90: " + deepest);
+        for (Set<String> mobs : List.of(top, middle, deep, deepest)) {
+            for (String mob : mobs) {
+                helper.assertTrue(BuiltInRegistries.ENTITY_TYPE.containsKey(ResourceLocation.parse(mob)), mob + " isn't installed");
+            }
+        }
+        helper.succeed();
+    }
+
+    /**
+     * Fight them, then mine: an infested room's spawners each send one wave the first time someone comes near, and
+     * break, so once its mobs are dealt with the room stays clear (until the reset).
+     */
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void clearedInfestedRoomsStayClear(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos corner = helper.absolutePos(BlockPos.ZERO).above(150);
+        Placement room = Placement.carved(Kind.INFESTED, corner, Rotation.NONE, 11, EnumSet.of(Direction.NORTH));
+        MinesBuilder.place(level, room, 10, RandomSource.create(11));
+        List<BlockPos> spawners = new ArrayList<>();
+        forEach(corner, Kind.INFESTED.size(), (pos, x, y, z) -> {
+            if (level.getBlockState(pos).is(Blocks.SPAWNER)) {
+                spawners.add(pos.immutable());
+            }
+        });
+        helper.assertTrue(spawners.size() >= 2 && spawners.stream().allMatch(pos -> SpawnerWaves.isWaveSpawner(level, pos)), spawners.size() + " wave spawners");
+        List<Mob> wave = new ArrayList<>();
+        spawners.forEach(pos -> wave.addAll(SpawnerWaves.release(level, pos)));
+        helper.assertTrue(!wave.isEmpty(), "the spawners should send their waves");
+        wave.forEach(Entity::discard);
+        int[] left = { 0 };
+        forEach(corner, Kind.INFESTED.size(), (pos, x, y, z) -> left[0] += level.getBlockState(pos).is(Blocks.SPAWNER) ? 1 : 0);
+        clear(level, corner, Kind.INFESTED.size());
+        helper.assertTrue(left[0] == 0, left[0] + " spawners left to refill the room");
+        helper.succeed();
+    }
+
+    /** Nothing spawns in the Mines on its own: only from the rooms (and the mobs placed in them). */
+    @GameTest(template = EMPTY)
+    public static void nothingSpawnsNaturallyInTheMines(GameTestHelper helper) {
+        for (MobSpawnType type : List.of(MobSpawnType.NATURAL, MobSpawnType.CHUNK_GENERATION, MobSpawnType.PATROL)) {
+            helper.assertTrue(MinesMobs.blocks(MinesPortal.MINES, type), type + " spawns should be stopped in the Mines");
+            helper.assertTrue(!MinesMobs.blocks(Level.OVERWORLD, type), type + " spawns should still happen elsewhere");
+        }
+        for (MobSpawnType type : List.of(MobSpawnType.SPAWNER, MobSpawnType.STRUCTURE, MobSpawnType.COMMAND, MobSpawnType.SPAWN_EGG)) {
+            helper.assertTrue(!MinesMobs.blocks(MinesPortal.MINES, type), type + " spawns should still happen in the Mines");
+        }
+        helper.succeed();
+    }
+
+    /** A mob placed in a room (a grottol, a trader, a critter) stands somewhere open on its floor, and stays. */
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void mobsArePlacedOnARoomsFloor(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos corner = helper.absolutePos(BlockPos.ZERO).above(150);
+        Placement room = Placement.carved(Kind.COMMON, corner, Rotation.NONE, 13, EnumSet.of(Direction.SOUTH));
+        MinesBuilder.place(level, room, 5, RandomSource.create(13));
+        level.getEntitiesOfClass(Entity.class, AABB.of(room.box()), entity -> !(entity instanceof ServerPlayer)).forEach(Entity::discard);
+        List<String> problems = new ArrayList<>();
+        RandomSource random = RandomSource.create(13);
+        for (int i = 0; i < 10; i++) {
+            Entity placed = MinesMobs.placeIn(level, room.box(), EntityType.ZOMBIE, random);
+            if (placed == null) {
+                problems.add("nowhere found");
+                continue;
+            }
+            BlockPos at = placed.blockPosition();
+            if (!room.box().isInside(at) || !level.getBlockState(at.below()).isSolid() || !level.noCollision(placed)
+                    || !((Mob) placed).isPersistenceRequired()) {
+                problems.add("a mob at " + at.subtract(corner).toShortString());
+            }
+            placed.discard();
+        }
+        clear(level, corner, Kind.COMMON.size());
+        helper.assertTrue(problems.isEmpty(), problems.toString());
+        helper.assertTrue(MinesMobs.placeIn(level, room.box(), null, random) == null, "a mob that isn't installed is skipped");
+        helper.succeed();
+    }
+
+    /**
+     * With the pack, its mobs for the Mines (Ice and Fire's trolls and dread mobs, Mowzie's Wroughtnaut and grottol,
+     * the vein goblin trader, the critters) can each be placed in a room, and are still there a second later. Those
+     * that aren't installed are skipped.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = 400)
+    public static void packMobsLiveInTheMines(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos corner = helper.absolutePos(BlockPos.ZERO).above(150);
+        Placement room = Placement.carved(Kind.COMMON, corner, Rotation.NONE, 17, EnumSet.of(Direction.SOUTH));
+        MinesBuilder.place(level, room, 5, RandomSource.create(17));
+        // In the Mines every doorway leads on into rock, but here one opens on the test world's sky: a dread lich's skull
+        // fired out of it would fly on loading chunks until the server ran out of memory. So nothing they fire gets far.
+        List<Entity> placed = new ArrayList<>();
+        AABB near = AABB.of(room.box()).inflate(32);
+        Runnable sweep = () -> level.getEntitiesOfClass(Projectile.class, near, shot -> placed.contains(shot.getOwner())).forEach(Entity::discard);
+        helper.onEachTick(sweep);
+        List<ResourceLocation> ids = new ArrayList<>(List.of(MinesMobs.WROUGHTNAUT, MinesMobs.GROTTOL, MinesMobs.TRADER));
+        ids.addAll(MinesMobs.CRITTERS);
+        MinesMobs.DEFAULT_INFESTED.stream().map(entry -> ResourceLocation.parse(entry.split("=")[0])).filter(id -> id.getNamespace().equals("iceandfire")).forEach(ids::add);
+        List<String> problems = new ArrayList<>();
+        RandomSource random = RandomSource.create(17);
+        for (ResourceLocation id : ids) {
+            EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.getOptional(id).orElse(null);
+            if (type == null) {
+                continue;
+            }
+            Entity entity = MinesMobs.placeIn(level, room.box(), type, random);
+            if (entity == null) {
+                problems.add(id + " couldn't be placed");
+            } else {
+                placed.add(entity);
+            }
+        }
+        helper.runAfterDelay(20, () -> {
+            placed.stream().filter(entity -> entity.isRemoved()).forEach(entity -> problems.add(EntityType.getKey(entity.getType()) + " was gone a second later"));
+            sweep.run();
+            placed.forEach(Entity::discard);
+            clear(level, corner, Kind.COMMON.size());
+            helper.assertTrue(problems.isEmpty(), problems.toString());
+            helper.succeed();
+        });
     }
 
     private static void clear(ServerLevel level, BlockPos corner, Vec3i size) {
