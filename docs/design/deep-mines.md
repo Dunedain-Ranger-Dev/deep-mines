@@ -56,7 +56,7 @@ A living space where players go to gather resources on a more frequent schedule 
   - `quarry_` (15): one open hall out to the room's outer walls, with a flat floor, a domed roof, and a stepped open
     pit in the middle, packed with ore around its walls, ringed by a boardwalk 3 wide edged in stripped logs.
   - `flooded_` (15): a deep pool, level with the floor, to dive into; its ore is around the pool's walls and bottom.
-  - `infested_` (20): spawners (zombies and skeletons until MINE-25 picks the Mines' own mobs), bones and cobwebs,
+  - `infested_` (20): spawners (of the floor's mobs, see [Who holds the Mines](#who-holds-the-mines)), bones and cobwebs,
     and the usual amount of ore.
   - `vein_` (10): no cave, but timbered galleries (like the corridors) in from every doorway to a hall in the middle,
     with crosscuts off them ending at veins. Very large veins show in the galleries' walls and roofs, all of one ore,
@@ -80,9 +80,36 @@ A living space where players go to gather resources on a more frequent schedule 
   a room is deepslate as often as vanilla's deepslate is at that height (all of them from floor 51), with tuff in
   place of the other stones and deepslate ore.
 - **Infested caves.** Hostile mobs hold the caves: players fight them first, then mine freely.
-  - Mostly undead, plus natural hostile cave creatures (to be decided: things like cave fishers).
-  - No natural spawning (MINE-22). Mobs come from the infested rooms' spawners. The Mines' biome spawns nothing
-    (MINE-16), which covers vanilla's spawning; mods that spawn mobs their own way still need checking.
+  - Each infested room's spawners are Dungeon Delving's wave spawners (DD-110): the first time someone comes near,
+    one sends a wave of its mob and breaks. A cleared room stays clear until the reset (MINE-24).
+  - No natural spawning (MINE-22). The Mines' biome spawns nothing (MINE-16), and any natural, chunk-generation or
+    patrol spawn in the Mines is cancelled, so mods that spawn mobs their own way are stopped too.
+
+## Who holds the Mines
+
+The dwarves' old mines have been overrun, and the deeper the floor, the older and darker what holds it (MINE-25). The
+infested rooms' mobs come in four tiers of 25 floors, set in `infestedMobs` as Dungeon Delving's `"mob=weight@tiers"`
+entries; mobs from mods that aren't installed are skipped. A tier is also the Dungeon Delving tier for the size of a
+spawner's wave.
+
+| Floors | Who | Mobs |
+|---|---|---|
+| 1 to 25 | Pests and scavengers | Kobolds (scavengers, looters, packmasters), silverfish, cave spiders |
+| 26 to 50 | Goblin warbands and trolls | Goblins (archers, gladiators, pyros, shamans), Ice and Fire's trolls, the last kobolds and cave spiders |
+| 51 to 75 | The restless dead | Dungeon Delving's skeletons (swordsmen, knights, mages, stray and bogged swordsmen, wither skeleton archers and mages), the last goblins and trolls |
+| 76 and below | The deep dead | Ice and Fire's dread thralls, ghouls, knights, scuttlers, beasts and liches, with skeleton knights and mages and wither skeletons |
+
+- Trolls come in all three of Ice and Fire's kinds (forest, frost, mountain): a troll's kind follows its biome, and
+  the Mines' biome isn't one of theirs, so it's picked at random.
+- On the deepest tier, one infested room in 6 is a **Ferrous Wroughtnaut's hall** instead (Mowzie's Mobs): the
+  Wroughtnaut stands where the first spawner would be, and the room has no spawners.
+- Now and then a room has something living in it, placed when it's built and kept until someone deals with it: a
+  **grottol** in one vein room in 3 (Mowzie's Mobs; it flees, and drops diamonds), a **vein goblin trader** in one common
+  room in 20 (Goblin Traders), and a stag beetle or jumping spider or two in one common room in 3 (Critters and
+  Companions).
+- Ice and Fire: Community Edition has no myrmex yet, so there's no hive room. A dread lich's skulls load the chunks
+  they fly through: in the Mines they hit rock soon enough, but one fired into open sky could go on generating chunks
+  (the pack's tests had to clear them away).
 
 ## Ore by floor
 
@@ -134,6 +161,7 @@ the `deepmines:in_mines` filter).
 | Reset frequency | 7 days | How often the Mines reset |
 | Floors | 100 | How many floors the Mines go down (`floors`) |
 | Room mix | 50 / 15 / 15 / 20 / 10 | How often common, quarry, flooded, infested and vein rooms come up, as weights (`[rooms]`) |
+| Infested rooms' mobs | See [Who holds the Mines](#who-holds-the-mines) | Which mobs infested rooms' spawners have, by tier (`infestedMobs`) |
 | Hand-built rooms | 25% | How often a hand-built room or corridor is used instead of a carved one, if there are any (`handBuilt`) |
 | Team Mines | Off (server-wide) | Ties the Mines to each FTB Team or party instead, to prevent griefing |
 | Ore modifier | 1.0 | A global multiplier on how often ore appears |
@@ -176,12 +204,14 @@ Built in 0.1.0 (MINE-2 to MINE-4), and tested in game on 2026-11-02:
    test.
    - **Dropped:** the amounts were tuned by hand in game instead (MINE-36), so there's no baseline to match.
 6. **Natural cave mobs.** Which ones, and from which mod? None are in the pack yet.
-   - Left open: existing mobs to find, or new ones to design. Undead only until then.
+   - **Decided (MINE-25):** mobs already in the pack, by depth: see [Who holds the Mines](#who-holds-the-mines).
 7. **Team Mines.** One region per team inside the same dimension (the way Dungeon Delving gives each run a region),
    or a dimension per team? And does each team get its own reset?
    - **Decided:** each team gets its own region. A reset wipes the whole dimension, so every team shares the
      schedule.
 8. **Staying cleared.** Once players clear a cave, does it stay clear until the next reset?
+   - **Decided (MINE-24):** yes. Each spawner sends one wave and breaks, so a cleared room has nothing left to refill
+     it until the reset rebuilds the floor.
 
 ## Tickets
 

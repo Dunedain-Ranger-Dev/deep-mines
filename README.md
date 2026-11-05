@@ -8,7 +8,8 @@ A mining dimension for NeoForge 1.21.1 that resets on a schedule, so nobody has 
 - **The Mines:** 100 floors below the entrance hall, each big rooms of rock (3 to 5 near the top, up to 16 to 25 below floor 75) joined by timbered mineshafts,
   with a ladder down in the farthest room. The deeper the floor, the better its ore, and deepslate from about floor 50.
   Rooms are common (the usual amount of ore, a cave to dig down or up into or old timbered workings), quarries (packed with ore), flooded (a deep pool
-  to dive into), infested (spawners) or vein rooms (timbered galleries after very large veins of one ore), and every
+  to dive into), infested (wave spawners of the floor's mobs: kobolds and vermin near the top, then goblins and trolls,
+  the restless dead, and Ice and Fire's dread mobs at the bottom; a cleared room stays clear) or vein rooms (timbered galleries after very large veins of one ore), and every
   room and corridor is carved fresh, so no two are alike. Floors are
   built the first time someone reaches them, a little each tick so the server doesn't freeze. Around the floors is
   solid rock (stone, deepslate below Y 0), all one bare biome: no caves, structures or natural mob spawns. Aquifers

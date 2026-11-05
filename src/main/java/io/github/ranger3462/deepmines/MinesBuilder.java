@@ -29,12 +29,10 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.TicketType;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
-import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.templatesystem.AlwaysTrueTest;
@@ -49,7 +47,7 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
  * Turns a floor's layout (from Dungeon Delving's generator) into the Mines' pieces in the world: a room per cell, a
  * corridor per connection and a cap in every doorway with no corridor. Rooms and corridors are carved fresh, each from
  * its own seed ({@link RoomCarver}), unless a hand-built one is picked instead. Then each piece's ore spots become ore
- * from the floor's table (one ore for the whole of a vein room), and its spawners get their mobs. A room or corridor is deepslate, with deepslate ore, as
+ * from the floor's table (one ore for the whole of a vein room), and it gets its mobs ({@link MinesMobs}). A room or corridor is deepslate, with deepslate ore, as
  * often as its floor's depth says ({@link OreTable#deepslateChance}).
  */
 public final class MinesBuilder {
@@ -94,8 +92,6 @@ public final class MinesBuilder {
     /** Keeps a piece's chunks loaded while it's built: a minute, which is plenty. */
     private static final TicketType<ChunkPos> BUILDING = TicketType.create(DeepMines.MODID + "_building", Comparator.comparingLong(ChunkPos::toLong), 1200);
 
-    /** The mobs spawners get, until the Mines' own are picked (MINE-25). */
-    private static final List<EntityType<?>> SPAWNER_MOBS = List.of(EntityType.ZOMBIE, EntityType.SKELETON);
 
     private MinesBuilder() {}
 
@@ -322,12 +318,7 @@ public final class MinesBuilder {
                 BlockState state = ore == Blocks.AIR ? (deep ? Blocks.DEEPSLATE : Blocks.STONE).defaultBlockState() : ore.defaultBlockState();
                 vein.forEach(spot -> level.setBlock(spot, state, Block.UPDATE_CLIENTS));
             }
-            for (BlockPos pos : spawners) {
-                if (level.getBlockEntity(pos) instanceof SpawnerBlockEntity spawner) {
-                    spawner.setEntityId(SPAWNER_MOBS.get(random.nextInt(SPAWNER_MOBS.size())), random);
-                    spawner.setChanged();
-                }
-            }
+            MinesMobs.populate(level, placement.kind(), floor, placement.box(), spawners, random);
         }
     }
 
