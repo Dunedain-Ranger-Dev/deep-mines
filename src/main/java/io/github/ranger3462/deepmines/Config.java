@@ -17,6 +17,12 @@ public final class Config {
             .comment("How many floors the Mines go down. Each floor is built the first time someone reaches it.")
             .defineInRange("floors", 100, 1, 1000);
 
+    public static final ModConfigSpec.DoubleValue ORE_MODIFIER = BUILDER
+            .comment("How much ore the Mines have, against the usual: 2 is twice as many veins in every room, 0.5 half, 0 none.",
+                    "It changes how much ore there is, not the mix. Hand-built rooms only have as many veins as were built into",
+                    "them, so above 1 they keep theirs. Floors already built keep theirs until the reset.")
+            .defineInRange("oreModifier", 1.0, 0.0, 10.0);
+
     static {
         BUILDER.comment("How often each kind of room comes up on a floor, as weights (the first room is always common).")
                 .push("rooms");

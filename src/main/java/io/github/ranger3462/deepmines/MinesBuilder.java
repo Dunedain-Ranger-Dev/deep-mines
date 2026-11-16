@@ -284,7 +284,7 @@ public final class MinesBuilder {
                 return true;
             }
             if (grid == null) {
-                grid = RoomCarver.carve(placement.kind(), placement.seed(), placement.openings()).grid();
+                grid = RoomCarver.carve(placement.kind(), placement.seed(), placement.openings(), Config.ORE_MODIFIER.get()).grid();
                 return false;
             }
             if (layer < grid.sy) {
@@ -313,8 +313,10 @@ public final class MinesBuilder {
         private void finish(ServerLevel level) {
             // A vein room's ore is all one kind; everywhere else, each vein's is picked on its own.
             OreTable.Ore only = placement.kind() == Kind.VEIN ? OreTable.pick(floor, random) : null;
+            // A hand-built room's veins are as built: below an ore modifier of 1, some of them are left as rock.
+            double keep = placement.isCarved() ? 1 : Math.min(1, Config.ORE_MODIFIER.get());
             for (List<BlockPos> vein : veins(spots)) {
-                Block ore = (only != null ? only : OreTable.pick(floor, random)).block(deep);
+                Block ore = keep < 1 && random.nextDouble() >= keep ? Blocks.AIR : (only != null ? only : OreTable.pick(floor, random)).block(deep);
                 BlockState state = ore == Blocks.AIR ? (deep ? Blocks.DEEPSLATE : Blocks.STONE).defaultBlockState() : ore.defaultBlockState();
                 vein.forEach(spot -> level.setBlock(spot, state, Block.UPDATE_CLIENTS));
             }
