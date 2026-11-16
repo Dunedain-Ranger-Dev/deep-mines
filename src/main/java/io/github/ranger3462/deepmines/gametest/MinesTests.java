@@ -36,6 +36,7 @@ import io.github.ranger3462.deepmines.ModBlocks;
 import io.github.ranger3462.deepmines.OreTable;
 import io.github.ranger3462.deepmines.OreTable.Ore;
 import io.github.ranger3462.deepmines.RoomCarver;
+import io.github.ranger3462.dungeondelving.dungeon.DungeonLoot;
 import io.github.ranger3462.dungeondelving.dungeon.SpawnerWaves;
 import io.github.ranger3462.dungeondelving.dungeon.layout.DungeonLayout.Cell;
 import net.kyrptonaught.customportalapi.CustomPortalApiRegistry;
@@ -60,6 +61,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.projectile.Projectile;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
@@ -521,6 +523,51 @@ public class MinesTests {
         helper.succeed();
     }
 
+    /**
+     * The ore modifier scales how much ore rooms are carved with: about twice as much at 2, none at 0, and at 1 the
+     * same rooms as without it.
+     */
+    @GameTest(template = EMPTY)
+    public static void theOreModifierScalesTheOre(GameTestHelper helper) {
+        Set<Direction> openings = EnumSet.of(Direction.NORTH, Direction.SOUTH);
+        long[] ore = new long[4]; // at 1, at 2, at 0, without
+        for (Kind kind : List.of(Kind.COMMON, Kind.QUARRY, Kind.FLOODED, Kind.INFESTED, Kind.VEIN)) {
+            for (long seed = 1; seed <= 12; seed++) {
+                ore[0] += RoomCarver.carve(kind, seed, openings, 1).grid().count(MinesGrid.ORE);
+                ore[1] += RoomCarver.carve(kind, seed, openings, 2).grid().count(MinesGrid.ORE);
+                ore[2] += RoomCarver.carve(kind, seed, openings, 0).grid().count(MinesGrid.ORE);
+                ore[3] += RoomCarver.carve(kind, seed, openings).grid().count(MinesGrid.ORE);
+            }
+        }
+        double ratio = (double) ore[1] / ore[0];
+        helper.assertTrue(ore[0] == ore[3], "at 1, the same ore as without a modifier: " + ore[0] + " and " + ore[3]);
+        helper.assertTrue(ratio > 1.6 && ratio < 2.4, "at 2, about twice the ore: " + ore[1] + " against " + ore[0]);
+        helper.assertTrue(ore[2] == 0, "at 0, no ore: " + ore[2]);
+        helper.succeed();
+    }
+
+    /**
+     * Mithril, the dwarves' rare ore, is in the floors' ore from floor 6 when Iron's Spells is here; and with the pack,
+     * mining it out of the Mines gives the ore and its raw Mithril, which Dungeon Delving would otherwise strip from
+     * any loot made outside its dungeons.
+     */
+    @GameTest(template = EMPTY)
+    public static void mithrilFromTheMinesIsKept(GameTestHelper helper) {
+        if (!ModList.get().isLoaded("irons_spellbooks")) {
+            helper.succeed();
+            return;
+        }
+        helper.assertTrue(Ore.MITHRIL.installed() && Ore.MITHRIL.block(false) != Blocks.AIR && Ore.MITHRIL.block(true) != Blocks.AIR,
+                "Mithril ore should be placed when Iron's Spells is here");
+        if (ModList.get().isLoaded("kubejs")) { // The pack's data takes it off the dungeon-only list.
+            for (String item : List.of("mithril_ore", "deepslate_mithril_ore", "raw_mithril")) {
+                ItemStack stack = new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.fromNamespaceAndPath("irons_spellbooks", item)));
+                helper.assertTrue(!stack.is(DungeonLoot.DUNGEON_ONLY), item + " shouldn't be dungeon-only, so mining it in the Mines keeps it");
+            }
+        }
+        helper.succeed();
+    }
+
     /** The installed mobs infested rooms can have on a floor. */
     private static Set<String> mobsOf(ServerLevel level, int floor) {
         Set<String> mobs = new HashSet<>();
@@ -638,15 +685,17 @@ public class MinesTests {
         BlockPos corner = helper.absolutePos(BlockPos.ZERO).above(150);
         Placement room = Placement.carved(Kind.COMMON, corner, Rotation.NONE, 17, EnumSet.of(Direction.SOUTH));
         MinesBuilder.place(level, room, 5, RandomSource.create(17));
-        // In the Mines every doorway leads on into rock, but here one opens on the test world's sky: a dread lich's skull
-        // fired out of it would fly on loading chunks until the server ran out of memory. So nothing they fire gets far.
+        // Nothing they fire gets far, in case anything else flies on like the lich's skulls.
         List<Entity> placed = new ArrayList<>();
         AABB near = AABB.of(room.box()).inflate(32);
         Runnable sweep = () -> level.getEntitiesOfClass(Projectile.class, near, shot -> placed.contains(shot.getOwner())).forEach(Entity::discard);
         helper.onEachTick(sweep);
         List<ResourceLocation> ids = new ArrayList<>(List.of(MinesMobs.WROUGHTNAUT, MinesMobs.GROTTOL, MinesMobs.TRADER));
         ids.addAll(MinesMobs.CRITTERS);
-        MinesMobs.DEFAULT_INFESTED.stream().map(entry -> ResourceLocation.parse(entry.split("=")[0])).filter(id -> id.getNamespace().equals("iceandfire")).forEach(ids::add);
+        // All but the dread lich: its skulls load chunks as they fly, and one that got out of this room into the test
+        // world's open sky would go on generating chunks until the server ran out of memory. In the Mines they hit rock.
+        MinesMobs.DEFAULT_INFESTED.stream().map(entry -> ResourceLocation.parse(entry.split("=")[0]))
+                .filter(id -> id.getNamespace().equals("iceandfire") && !id.getPath().equals("dread_lich")).forEach(ids::add);
         List<String> problems = new ArrayList<>();
         RandomSource random = RandomSource.create(17);
         for (ResourceLocation id : ids) {

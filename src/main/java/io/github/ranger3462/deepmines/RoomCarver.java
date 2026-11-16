@@ -57,6 +57,9 @@ public final class RoomCarver {
     private static final int TOP = ROOM_HEIGHT - 1;
     /** The middle of a corridor's width, where its rails run. */
     private static final int MID_TUNNEL = TUNNEL_WIDTH / 2;
+    /** The ore modifier of the carving under way (on this thread): how many veins a room gets, against the usual. */
+    private static final ThreadLocal<Double> ORE_SCALE = ThreadLocal.withInitial(() -> 1.0);
+
     /** How many times a room is carved again before it gets walkways. */
     private static final int TRIES = 4;
 
@@ -70,6 +73,23 @@ public final class RoomCarver {
      * the sides of a room with a corridor; its rail line runs in from each of them (corridors ignore it).
      */
     public static Carved carve(Kind kind, long seed, Set<Direction> openings) {
+        return carve(kind, seed, openings, 1);
+    }
+
+    /**
+     * {@link #carve(Kind, long, Set)}, with {@code oreModifier} times the usual number of veins of ore (the
+     * {@code oreModifier} setting). At 1 it's the same carving as without.
+     */
+    public static Carved carve(Kind kind, long seed, Set<Direction> openings, double oreModifier) {
+        ORE_SCALE.set(oreModifier);
+        try {
+            return carveScaled(kind, seed, openings);
+        } finally {
+            ORE_SCALE.remove();
+        }
+    }
+
+    private static Carved carveScaled(Kind kind, long seed, Set<Direction> openings) {
         MinesGrid grid = null;
         for (int t = 0; t < TRIES; t++) {
             grid = carveOnce(kind, new Random(seed + t * 0x9E3779B97F4A7C15L), openings);
@@ -711,7 +731,7 @@ public final class RoomCarver {
             for (int tries = 0; tries < 40 && Math.abs(pick[1] - height) > 6; tries++) {
                 pick = faces.get(random.nextInt(faces.size()));
             }
-            vein(g, random, pick[0], pick[1], pick[2], vein.size());
+            grow(g, random, pick[0], pick[1], pick[2], vein.size());
             if (g.type(pick[0], pick[1], pick[2]) == ORE) {
                 // What grew (with anything it ran into) shows now.
                 Deque<int[]> queue = new ArrayDeque<>(List.of(pick));
@@ -772,8 +792,18 @@ public final class RoomCarver {
 
     // --- Ore ---
 
-    /** Grows a vein of up to {@code size} ore spots from a starting spot, through rock only. */
+    /**
+     * A vein of up to {@code size} ore spots from a starting spot, through rock only; or, with an ore modifier, that
+     * many of them (more at the same spot grow into a bigger vein, none leaves rock).
+     */
     private static void vein(MinesGrid g, Random random, int x, int y, int z, int size) {
+        for (int i = scaled(random, 1); i > 0; i--) {
+            grow(g, random, x, y, z, size);
+        }
+    }
+
+    /** Grows a vein of up to {@code size} ore spots from a starting spot, through rock only. */
+    private static void grow(MinesGrid g, Random random, int x, int y, int z, int size) {
         if (!g.oreable(x, y, z)) {
             return;
         }
@@ -794,14 +824,29 @@ public final class RoomCarver {
         }
     }
 
+    /**
+     * A number of veins, times the ore modifier: 2.5 veins is 2 or 3, as likely as the fraction says. At 1 it's left
+     * as it is, without touching {@code random}, so the carving is the same as without a modifier.
+     */
+    private static int scaled(Random random, int count) {
+        double scale = ORE_SCALE.get();
+        if (scale == 1) {
+            return count;
+        }
+        double veins = count * scale;
+        int whole = (int) veins;
+        return whole + (random.nextDouble() < veins - whole ? 1 : 0);
+    }
+
     /** Scatters {@code count} veins through the rock between two heights. */
     private static void veins(MinesGrid g, Random random, int count, int yMin, int yMax, int sizeMin, int sizeMax) {
+        count = scaled(random, count);
         for (int placed = 0, tries = 0; placed < count && tries < count * 20; tries++) {
             int x = between(random, 2, g.sx - 3);
             int y = between(random, yMin, yMax);
             int z = between(random, 2, g.sz - 3);
             if (g.oreable(x, y, z)) {
-                vein(g, random, x, y, z, between(random, sizeMin, sizeMax));
+                grow(g, random, x, y, z, between(random, sizeMin, sizeMax));
                 placed++;
             }
         }
@@ -817,6 +862,7 @@ public final class RoomCarver {
      * within {@code reach} blocks of one, so they show or nearly show.
      */
     private static void veinsNear(MinesGrid g, Random random, int count, Near near, int reach, int sizeMin, int sizeMax) {
+        count = scaled(random, count);
         List<int[]> faces = new ArrayList<>();
         for (int x = 1; x < g.sx - 1; x++) {
             for (int y = 1; y < g.sy - 1; y++) {
@@ -839,7 +885,7 @@ public final class RoomCarver {
             int y = face[1] + d.getStepY() * steps;
             int z = face[2] + d.getStepZ() * steps;
             if (g.oreable(x, y, z)) {
-                vein(g, random, x, y, z, between(random, sizeMin, sizeMax));
+                grow(g, random, x, y, z, between(random, sizeMin, sizeMax));
                 placed++;
             }
         }

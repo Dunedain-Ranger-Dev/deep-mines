@@ -149,7 +149,8 @@ Percent of the ore on that floor; "-" is under 0.05%. What that means as you go 
 
 **Mithril** is the dwarves' rare ore, for their quests (Kingdom Sim, KING-20). It reuses Iron's Spells 'n Spellbooks'
 Mithril ore. It's a small chance on every floor below 5, 0.5% of the ore on floor 6 rising to 2% on floor 100. The
-pack lists Mithril as dungeon-only today, so that has to change first (MINE-35).
+pack takes Mithril ore and raw Mithril off Dungeon Delving's dungeon-only list, so mining it in the Mines keeps it;
+Mithril scrap stays dungeon-only, and Mithril ore stays in tier 2 to 4 dungeons too (MINE-35).
 
 Other ore the pack places in the Mines comes on top of this table: Ice and Fire's silver and sapphire (DD-113, through
 the `deepmines:in_mines` filter).
@@ -164,7 +165,7 @@ the `deepmines:in_mines` filter).
 | Infested rooms' mobs | See [Who holds the Mines](#who-holds-the-mines) | Which mobs infested rooms' spawners have, by tier (`infestedMobs`) |
 | Hand-built rooms | 25% | How often a hand-built room or corridor is used instead of a carved one, if there are any (`handBuilt`) |
 | Team Mines | Off (server-wide) | Ties the Mines to each FTB Team or party instead, to prevent griefing |
-| Ore modifier | 1.0 | A global multiplier on how often ore appears |
+| Ore modifier | 1.0 | How much ore the Mines have against the usual: 2 is twice as many veins in every room, 0 none (`oreModifier`, MINE-20). Hand-built rooms can only lose veins, not gain them |
 
 ## Where it stands
 
