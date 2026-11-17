@@ -33,7 +33,11 @@ import io.github.ranger3462.deepmines.MinesMobs;
 import io.github.ranger3462.deepmines.MinesPieces;
 import io.github.ranger3462.deepmines.MinesPieces.Kind;
 import io.github.ranger3462.deepmines.MinesPortal;
+import io.github.ranger3462.deepmines.MinesRegions;
 import io.github.ranger3462.deepmines.MinesReset;
+import io.github.ranger3462.deepmines.MinesTeams;
+import io.github.ranger3462.deepmines.Config;
+import io.github.ranger3462.deepmines.MinesEntrance;
 import io.github.ranger3462.deepmines.ModBlocks;
 import io.github.ranger3462.deepmines.OreTable;
 import io.github.ranger3462.deepmines.OreTable.Ore;
@@ -745,7 +749,7 @@ public class MinesTests {
         helper.assertTrue(level.getBlockState(start.ladderDown()).is(ModBlocks.LADDER_DOWN.get()), "the start hall has a ladder down");
         helper.assertTrue(level.getBlockState(start.ladderUp()).is(ModBlocks.LADDER_UP.get()), "and a ladder up and out");
         helper.assertTrue(MinesFloors.floorAt(base, start.ladderDown()) == MinesFloors.START, "it's on the start floor");
-        helper.assertTrue(MinesFloorsData.get(level).floor(1).isEmpty(), "floor 1 isn't built until someone goes down");
+        helper.assertTrue(MinesFloorsData.get(level).floor(base, 1).isEmpty(), "floor 1 isn't built until someone goes down");
         // Deeper floors have more rooms.
         RandomSource random = RandomSource.create(1);
         for (int[] tier : new int[][] { { 1, 3, 5 }, { 25, 3, 5 }, { 26, 6, 9 }, { 50, 6, 9 }, { 51, 10, 15 }, { 75, 10, 15 }, { 76, 16, 25 }, { 100, 16, 25 } }) {
@@ -757,13 +761,13 @@ public class MinesTests {
 
         ServerPlayer player = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "mines_tester"));
         Optional<BlockPos> toOne = MinesFloors.descend(player, level, base, MinesFloors.START);
-        helper.assertTrue(MinesFloorsData.get(level).floor(1).isEmpty() && MinesBuildQueue.pending() > 0, "floor 1 is built a bit at a time");
+        helper.assertTrue(MinesFloorsData.get(level).floor(base, 1).isEmpty() && MinesBuildQueue.pending() > 0, "floor 1 is built a bit at a time");
         MinesBuildQueue.finish(level.getServer());
-        MinesFloorsData.Floor one = MinesFloorsData.get(level).floor(1).orElseThrow();
+        MinesFloorsData.Floor one = MinesFloorsData.get(level).floor(base, 1).orElseThrow();
         helper.assertTrue(toOne.equals(Optional.of(one.arrivalFromAbove())), "going down lands beside floor 1's ladder up: " + toOne);
         Optional<BlockPos> toTwo = MinesFloors.descend(player, level, base, 1);
         MinesBuildQueue.finish(level.getServer());
-        MinesFloorsData.Floor two = MinesFloorsData.get(level).floor(2).orElseThrow();
+        MinesFloorsData.Floor two = MinesFloorsData.get(level).floor(base, 2).orElseThrow();
         helper.assertTrue(toTwo.equals(Optional.of(two.arrivalFromAbove())), "and on to floor 2: " + toTwo);
         for (MinesFloorsData.Floor floor : List.of(start, one, two)) {
             helper.assertTrue(level.getBlockState(floor.ladderUp()).is(ModBlocks.LADDER_UP.get()), "floor " + floor.number() + " has a ladder up");
@@ -873,8 +877,8 @@ public class MinesTests {
         MinesFloors.ascend(player, level, base, 1);
         helper.assertTrue(levels.level(player) == 2, "going back up keeps it: " + levels.level(player));
 
-        MinesFloorsData.Floor one = MinesFloorsData.get(level).floor(1).orElseThrow();
-        MinesFloorsData.Floor two = MinesFloorsData.get(level).floor(2).orElseThrow();
+        MinesFloorsData.Floor one = MinesFloorsData.get(level).floor(base, 1).orElseThrow();
+        MinesFloorsData.Floor two = MinesFloorsData.get(level).floor(base, 2).orElseThrow();
         helper.assertTrue(MinesLift.goTo(player, level, base, 2).equals(Optional.of(two.arrivalFromAbove())), "the lift goes to floor 2, by its ladder up");
         helper.assertTrue(MinesLift.goTo(player, level, base, 1).equals(Optional.of(one.arrivalFromAbove())), "and floor 1");
         helper.assertTrue(MinesLift.goTo(player, level, base, 3).isEmpty(), "but not floor 3");
@@ -897,8 +901,10 @@ public class MinesTests {
         ServerPlayer bob = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "team_tester_b"));
         UUID team = UUID.randomUUID();
         Map<UUID, UUID> teams = new java.util.HashMap<>();
-        var before = MinesLevels.teams;
-        MinesLevels.teams = player -> Optional.ofNullable(teams.get(player.getUUID()));
+        var before = MinesTeams.lookup;
+        boolean wasOn = Config.TEAM_MINES.get();
+        MinesTeams.lookup = player -> Optional.ofNullable(teams.get(player.getUUID()));
+        Config.TEAM_MINES.set(true);
         try {
             levels.reached(alice, 3);
             helper.assertTrue(levels.level(alice) == 3 && levels.personal(alice.getUUID()) == 3, "solo, floors raise alice's own level");
@@ -917,8 +923,103 @@ public class MinesTests {
             levels.reached(bob, 1);
             helper.assertTrue(levels.level(bob) == 1 && levels.teamLevel(team) == 7, "bob's floors are his own again");
         } finally {
-            MinesLevels.teams = before;
+            MinesTeams.lookup = before;
+            Config.TEAM_MINES.set(wasOn);
             levels.clear();
+        }
+        helper.succeed();
+    }
+
+    /**
+     * Team Mines: off, everyone shares the one Mines; on, each team has its own, each player in no team their own, and
+     * no one belongs on anyone else's floors. Without FTB Teams (as in the tests), every player is on their own.
+     */
+    @GameTest(template = EMPTY)
+    public static void eachTeamHasItsOwnMines(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinesRegions.get(level).clear();
+        ServerPlayer alice = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "region_tester_a"));
+        ServerPlayer bob = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "region_tester_b"));
+        ServerPlayer carol = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "region_tester_c"));
+        ServerPlayer dave = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "region_tester_d"));
+        Map<UUID, UUID> teams = new java.util.HashMap<>();
+        UUID red = UUID.randomUUID();
+        UUID blue = UUID.randomUUID();
+        teams.put(alice.getUUID(), red);
+        teams.put(bob.getUUID(), red);
+        teams.put(carol.getUUID(), blue);
+        var before = MinesTeams.lookup;
+        boolean wasOn = Config.TEAM_MINES.get();
+        try {
+            Config.TEAM_MINES.set(false);
+            MinesTeams.lookup = player -> Optional.ofNullable(teams.get(player.getUUID()));
+            for (ServerPlayer player : List.of(alice, carol, dave)) {
+                helper.assertTrue(MinesTeams.base(level, player).equals(MinesFloors.BASE), "off, everyone shares the one Mines");
+            }
+
+            Config.TEAM_MINES.set(true);
+            BlockPos redBase = MinesTeams.base(level, alice);
+            BlockPos blueBase = MinesTeams.base(level, carol);
+            BlockPos daveBase = MinesTeams.base(level, dave);
+            helper.assertTrue(MinesTeams.base(level, bob).equals(redBase), "teammates share their Mines");
+            helper.assertTrue(!redBase.equals(blueBase) && !redBase.equals(daveBase) && !blueBase.equals(daveBase) && !redBase.equals(MinesFloors.BASE),
+                    "each team, and each player on their own, has their own Mines: " + redBase + " " + blueBase + " " + daveBase);
+            // Far enough apart that no floor of one reaches another's: a floor stays within half a floor's spacing of its first room.
+            helper.assertTrue(Math.abs(redBase.getZ() - blueBase.getZ()) >= 2 * MinesFloors.FLOOR_SPACING, "with plenty of rock between");
+            BlockPos redHall = MinesLift.pos(redBase);
+            BlockPos deepRed = MinesFloors.center(redBase, 60).offset(400, 20, 400);
+            helper.assertTrue(MinesTeams.baseAt(redHall).equals(redBase) && MinesTeams.baseAt(deepRed).equals(redBase), "and every spot knows whose Mines it's in");
+            helper.assertTrue(MinesTeams.belongs(level, bob, deepRed) && !MinesTeams.belongs(level, carol, deepRed) && !MinesTeams.belongs(level, dave, redHall),
+                    "only the team belongs on its floors");
+            helper.assertTrue(MinesTeams.belongs(level, carol, redHall.atY(0)), "anyone may be down in the rock below them, where the portals arrive");
+
+            teams.remove(bob.getUUID());
+            helper.assertTrue(!MinesTeams.base(level, bob).equals(redBase) && !MinesTeams.belongs(level, bob, deepRed),
+                    "bob leaves the team: his Mines are his own again, and the team's aren't his");
+
+            MinesTeams.lookup = MinesTeams::fromFtb;
+            helper.assertTrue(MinesTeams.team(alice).isEmpty() && !MinesTeams.base(level, alice).equals(MinesTeams.base(level, carol)),
+                    "without FTB Teams, every player is a team of one");
+        } finally {
+            MinesTeams.lookup = before;
+            Config.TEAM_MINES.set(wasOn);
+            MinesRegions.get(level).clear();
+        }
+        helper.succeed();
+    }
+
+    /** Ladders and floors are per Mines: one team's floor 1 being built doesn't make another's. */
+    @GameTest(template = EMPTY, timeoutTicks = 400)
+    public static void teamsFloorsAreTheirOwn(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinesFloorsData data = MinesFloorsData.get(level);
+        data.clear();
+        BlockPos one = helper.absolutePos(BlockPos.ZERO).above(120);
+        BlockPos two = one.south(MinesTeams.REGION_SPACING);
+        MinesFloors.floor(level, one, MinesFloors.START);
+        MinesFloors.floor(level, one, 1);
+        helper.assertTrue(data.floor(one, 1).isPresent() && data.floor(two, 1).isEmpty() && data.floor(two, MinesFloors.START).isEmpty(),
+                "one Mines' floors are built, and not the other's");
+        data.clear();
+        helper.succeed();
+    }
+
+    /** portalAnywhere: on, the portal lets players in; off, it doesn't, but the Mines' own trips still go through. */
+    @GameTest(template = EMPTY)
+    public static void thePortalSettingWorksBothWays(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        ServerPlayer player = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "portal_tester"));
+        boolean was = Config.PORTAL_ANYWHERE.get();
+        try {
+            for (boolean anywhere : new boolean[] { true, false }) {
+                Config.PORTAL_ANYWHERE.set(anywhere);
+                var travel = new net.neoforged.neoforge.event.entity.EntityTravelToDimensionEvent(player, MinesPortal.MINES);
+                net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(travel);
+                helper.assertTrue(travel.isCanceled() != anywhere, "with portalAnywhere " + anywhere + ", going in is " + (travel.isCanceled() ? "stopped" : "let through"));
+            }
+            helper.assertTrue(MinesEntrance.letIn(true, false), "the Mines' own trips go through with it off");
+        } finally {
+            Config.PORTAL_ANYWHERE.set(was);
         }
         helper.succeed();
     }
@@ -936,10 +1037,15 @@ public class MinesTests {
         level.getDataStorage().save();
         Path folder = DimensionType.getStorageFolder(level.dimension(), level.getServer().getWorldPath(LevelResource.ROOT));
         Path file = folder.resolve("data").resolve(MinesLevels.fileName());
+        MinesRegions.get(level).region(UUID.randomUUID());
+        level.getDataStorage().save();
+        Path regions = folder.resolve("data").resolve(MinesRegions.fileName());
         // Saved data is written off the server thread.
         helper.succeedWhen(() -> {
             helper.assertTrue(Files.exists(file), "levels are saved in the level's own folder: " + file);
+            helper.assertTrue(Files.exists(regions), "and so are the teams' regions: " + regions);
             levels.clear();
+            MinesRegions.get(level).clear();
         });
     }
 

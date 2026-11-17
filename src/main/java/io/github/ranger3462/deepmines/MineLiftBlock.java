@@ -22,7 +22,7 @@ public class MineLiftBlock extends Block {
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
         if (level instanceof ServerLevel server && player instanceof ServerPlayer serverPlayer) {
-            MinesLift.use(serverPlayer, server, MinesFloors.BASE);
+            MinesLift.use(serverPlayer, server, MinesTeams.baseAt(pos));
         }
         return InteractionResult.sidedSuccess(level.isClientSide());
     }

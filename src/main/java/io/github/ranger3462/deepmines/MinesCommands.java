@@ -31,11 +31,11 @@ public final class MinesCommands {
                         .then(Commands.argument("floor", IntegerArgumentType.integer(1)).executes(context -> {
                             ServerPlayer player = context.getSource().getPlayerOrException();
                             ServerLevel mines = context.getSource().getServer().getLevel(MinesPortal.MINES);
-                            if (mines == null || !MinesLift.near(player, MinesFloors.BASE)) {
+                            if (mines == null || !MinesLift.near(player, MinesTeams.base(mines, player))) {
                                 context.getSource().sendFailure(Component.translatable("message.deepmines.lift_far"));
                                 return 0;
                             }
-                            return MinesLift.goTo(player, mines, MinesFloors.BASE, IntegerArgumentType.getInteger(context, "floor")).isPresent() ? 1 : 0;
+                            return MinesLift.goTo(player, mines, MinesTeams.base(mines, player), IntegerArgumentType.getInteger(context, "floor")).isPresent() ? 1 : 0;
                         })))
                 .then(Commands.literal("reset")
                         .requires(source -> source.hasPermission(Commands.LEVEL_GAMEMASTERS))
@@ -53,7 +53,8 @@ public final class MinesCommands {
                                 context.getSource().sendFailure(Component.translatable("message.deepmines.no_floor", floor, Config.FLOORS.get()));
                                 return 0;
                             }
-                            MinesFloors.visit(context.getSource().getPlayerOrException(), mines, MinesFloors.BASE, floor);
+                            ServerPlayer player = context.getSource().getPlayerOrException();
+                            MinesFloors.visit(player, mines, MinesTeams.base(mines, player), floor);
                             return 1;
                         }))));
     }
