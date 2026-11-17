@@ -27,6 +27,8 @@ import io.github.ranger3462.deepmines.MinesBuilder.Placement;
 import io.github.ranger3462.deepmines.MinesFloors;
 import io.github.ranger3462.deepmines.MinesFloorsData;
 import io.github.ranger3462.deepmines.MinesGrid;
+import io.github.ranger3462.deepmines.MinesLevels;
+import io.github.ranger3462.deepmines.MinesLift;
 import io.github.ranger3462.deepmines.MinesMobs;
 import io.github.ranger3462.deepmines.MinesPieces;
 import io.github.ranger3462.deepmines.MinesPieces.Kind;
@@ -69,7 +71,9 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
+import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.levelgen.DensityFunction;
 import net.minecraft.world.level.levelgen.GenerationStep;
 import net.minecraft.world.level.levelgen.placement.PlacedFeature;
@@ -837,6 +841,105 @@ public class MinesTests {
             }
             helper.assertTrue(dark.isEmpty(), "torch light falls short: " + dark);
             MinesFloorsData.get(level).clear();
+        });
+    }
+
+    /**
+     * A player's level rises to each floor they climb down to by ladder, not going back up, and the start hall's lift
+     * takes them to any floor down to it, by its ladder up, but no deeper.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = 400)
+    public static void theLiftGoesDownToYourLevel(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinesFloorsData.get(level).clear();
+        MinesLevels.get(level).clear();
+        BlockPos base = helper.absolutePos(BlockPos.ZERO).above(120);
+        MinesFloorsData.Floor start = MinesFloors.floor(level, base, MinesFloors.START);
+        BlockPos lift = MinesLift.pos(base);
+        helper.assertTrue(level.getBlockState(lift).is(ModBlocks.LIFT.get()), "the start hall has a lift");
+        helper.assertTrue(level.getBlockState(lift.above()).is(Blocks.CHAIN), "with its chain up into the vault");
+        helper.assertTrue(MinesFloors.floorAt(base, lift) == MinesFloors.START && !lift.equals(start.ladderDown()), "beside the ladder down");
+
+        ServerPlayer player = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "lift_tester"));
+        MinesLevels levels = MinesLevels.get(level);
+        helper.assertTrue(levels.level(player) == 0, "no level before going down");
+        helper.assertTrue(MinesLift.goTo(player, level, base, 1).isEmpty(), "and the lift won't go anywhere");
+        MinesFloors.descend(player, level, base, MinesFloors.START);
+        MinesBuildQueue.finish(level.getServer());
+        MinesFloors.descend(player, level, base, 1);
+        MinesBuildQueue.finish(level.getServer());
+        helper.assertTrue(levels.level(player) == 2, "two floors down by ladder is level 2: " + levels.level(player));
+        MinesFloors.ascend(player, level, base, 2);
+        MinesFloors.ascend(player, level, base, 1);
+        helper.assertTrue(levels.level(player) == 2, "going back up keeps it: " + levels.level(player));
+
+        MinesFloorsData.Floor one = MinesFloorsData.get(level).floor(1).orElseThrow();
+        MinesFloorsData.Floor two = MinesFloorsData.get(level).floor(2).orElseThrow();
+        helper.assertTrue(MinesLift.goTo(player, level, base, 2).equals(Optional.of(two.arrivalFromAbove())), "the lift goes to floor 2, by its ladder up");
+        helper.assertTrue(MinesLift.goTo(player, level, base, 1).equals(Optional.of(one.arrivalFromAbove())), "and floor 1");
+        helper.assertTrue(MinesLift.goTo(player, level, base, 3).isEmpty(), "but not floor 3");
+        helper.assertTrue(levels.level(player) == 2, "and riding it doesn't raise the level");
+        MinesFloorsData.get(level).clear();
+        levels.clear();
+        helper.succeed();
+    }
+
+    /**
+     * Strict, solo only: on a team, floors reached raise the team's level and not the player's own, everyone on the
+     * team shares it, and a player who leaves is back to their own level.
+     */
+    @GameTest(template = EMPTY)
+    public static void teamLevelsAreTheTeams(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinesLevels levels = MinesLevels.get(level);
+        levels.clear();
+        ServerPlayer alice = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "team_tester_a"));
+        ServerPlayer bob = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "team_tester_b"));
+        UUID team = UUID.randomUUID();
+        Map<UUID, UUID> teams = new java.util.HashMap<>();
+        var before = MinesLevels.teams;
+        MinesLevels.teams = player -> Optional.ofNullable(teams.get(player.getUUID()));
+        try {
+            levels.reached(alice, 3);
+            helper.assertTrue(levels.level(alice) == 3 && levels.personal(alice.getUUID()) == 3, "solo, floors raise alice's own level");
+
+            teams.put(alice.getUUID(), team);
+            teams.put(bob.getUUID(), team);
+            helper.assertTrue(levels.level(alice) == 0, "on a new team, alice has the team's level, not her own: " + levels.level(alice));
+            levels.reached(alice, 2);
+            levels.reached(bob, 7);
+            helper.assertTrue(levels.teamLevel(team) == 7 && levels.level(alice) == 7 && levels.level(bob) == 7, "the team shares its deepest floor");
+            helper.assertTrue(levels.personal(alice.getUUID()) == 3 && levels.personal(bob.getUUID()) == 0, "and its floors don't count for anyone's own");
+
+            teams.remove(bob.getUUID());
+            helper.assertTrue(levels.level(bob) == 0, "bob leaves the team, and keeps none of its progress: " + levels.level(bob));
+            helper.assertTrue(levels.level(alice) == 7, "while the team keeps it");
+            levels.reached(bob, 1);
+            helper.assertTrue(levels.level(bob) == 1 && levels.teamLevel(team) == 7, "bob's floors are his own again");
+        } finally {
+            MinesLevels.teams = before;
+            levels.clear();
+        }
+        helper.succeed();
+    }
+
+    /**
+     * Levels are saved with the level they're for (the Mines, in play), in its own folder: the folder a reset deletes,
+     * so a reset wipes every level along with the floors.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void levelsAreSavedWhereTheResetWipes(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinesLevels levels = MinesLevels.get(level);
+        levels.clear();
+        levels.reached(FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "reset_tester")), 4);
+        level.getDataStorage().save();
+        Path folder = DimensionType.getStorageFolder(level.dimension(), level.getServer().getWorldPath(LevelResource.ROOT));
+        Path file = folder.resolve("data").resolve(MinesLevels.fileName());
+        // Saved data is written off the server thread.
+        helper.succeedWhen(() -> {
+            helper.assertTrue(Files.exists(file), "levels are saved in the level's own folder: " + file);
+            levels.clear();
         });
     }
 

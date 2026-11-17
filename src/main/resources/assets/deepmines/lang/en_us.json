@@ -11,5 +11,12 @@
   "message.deepmines.bottom_floor": "This is the deepest floor of the Mines.",
   "message.deepmines.no_floor": "There's no floor %s: the Mines go down %s floors, and must be loaded.",
   "block.deepmines.ore_spot": "Ore Spot",
-  "message.deepmines.start_floor": "The Mines' entrance hall"
+  "message.deepmines.start_floor": "The Mines' entrance hall",
+  "block.deepmines.lift": "Mine Lift",
+  "message.deepmines.lift": "The lift goes down to floor %s, the deepest you've climbed down to this week. Click a floor, or sneak and use the winch to go straight to the deepest:",
+  "message.deepmines.lift_team": "The lift goes down to floor %s, the deepest your team has climbed down to this week. Click a floor, or sneak and use the winch to go straight to the deepest:",
+  "message.deepmines.lift_none": "The lift only goes down to floors you've climbed down to this week. Take the ladder down first.",
+  "message.deepmines.lift_to": "Take the lift down to floor %s",
+  "message.deepmines.lift_too_deep": "The lift can't take you to floor %s: it goes down to floor %s, the deepest you've climbed down to this week.",
+  "message.deepmines.lift_far": "You need to be beside the lift in the Mines' entrance hall."
 }

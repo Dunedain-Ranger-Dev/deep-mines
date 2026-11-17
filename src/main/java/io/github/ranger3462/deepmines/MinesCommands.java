@@ -5,12 +5,14 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
 /**
- * {@code /deepmines when} shows anyone when the Mines reset. Operators also get {@code /deepmines reset}, which makes a
+ * {@code /deepmines when} shows anyone when the Mines reset, and {@code /deepmines lift <floor>} takes anyone beside the
+ * lobby lift down to a floor no deeper than their level (what the lift's list in chat runs). Operators also get {@code /deepmines reset}, which makes a
  * reset happen the next time the server starts, and {@code /deepmines floor <number>}, which goes to a floor of the
  * Mines (building it if no one has been there yet); floor 0 is the start floor.
  */
@@ -25,6 +27,16 @@ public final class MinesCommands {
                     MinesReset.warn(context.getSource().getPlayerOrException());
                     return 1;
                 }))
+                .then(Commands.literal("lift")
+                        .then(Commands.argument("floor", IntegerArgumentType.integer(1)).executes(context -> {
+                            ServerPlayer player = context.getSource().getPlayerOrException();
+                            ServerLevel mines = context.getSource().getServer().getLevel(MinesPortal.MINES);
+                            if (mines == null || !MinesLift.near(player, MinesFloors.BASE)) {
+                                context.getSource().sendFailure(Component.translatable("message.deepmines.lift_far"));
+                                return 0;
+                            }
+                            return MinesLift.goTo(player, mines, MinesFloors.BASE, IntegerArgumentType.getInteger(context, "floor")).isPresent() ? 1 : 0;
+                        })))
                 .then(Commands.literal("reset")
                         .requires(source -> source.hasPermission(Commands.LEVEL_GAMEMASTERS))
                         .executes(context -> {

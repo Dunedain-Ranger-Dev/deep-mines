@@ -57,6 +57,8 @@ public final class MinesSpec {
     /** The start hall's ladder down to floor 1, and the ladder up out of the Mines, in the hall's own frame. */
     public static final int[] START_LADDER_DOWN = { MID, START_FLOOR_Y, 11 };
     public static final int[] START_LADDER_UP = { MID, START_FLOOR_Y, ROOM_SIZE - 12 };
+    /** The start hall's lift, east of the headframe over the ladder down, in the hall's own frame. */
+    public static final int[] START_LIFT = { MID + 6, START_FLOOR_Y, 11 };
 
     private MinesSpec() {}
 

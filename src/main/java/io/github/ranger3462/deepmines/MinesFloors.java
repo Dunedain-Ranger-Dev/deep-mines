@@ -180,7 +180,7 @@ public final class MinesFloors {
         }, "a ladder at " + spot[0].toShortString());
     }
 
-    /** Builds the start floor: its hall, unturned, with a cap in every doorway, and its two ladders. */
+    /** Builds the start floor: its hall, unturned, with a cap in every doorway, its two ladders and its lift. */
     static Floor buildStart(ServerLevel level, BlockPos center, RandomSource random) {
         MinesPieces pieces = pieces(level);
         BlockPos min = MinesBuilder.roomMin(center, Cell.ORIGIN);
@@ -192,6 +192,7 @@ public final class MinesFloors {
         BlockPos[] upSpot = { up, up.north(2) };
         placeLadder(level, downSpot, ModBlocks.LADDER_DOWN.get());
         placeLadder(level, upSpot, ModBlocks.LADDER_UP.get());
+        MinesLift.place(level, min);
         return new Floor(START, up, down, upSpot[1], downSpot[1]);
     }
 
@@ -223,12 +224,16 @@ public final class MinesFloors {
         level.setBlock(spot[1].above(), Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
     }
 
-    /** Takes a player down from {@code floor} to the next, building it if needed. Returns where they were sent, if anywhere. */
+    /**
+     * Takes a player down from {@code floor} to the next, building it if needed, and raises their level
+     * ({@link MinesLevels}) to it. Returns where they were sent, if anywhere.
+     */
     public static Optional<BlockPos> descend(ServerPlayer player, ServerLevel level, BlockPos base, int floor) {
         if (floor >= Config.FLOORS.get()) {
             player.displayClientMessage(Component.translatable("message.deepmines.bottom_floor"), true);
             return Optional.empty();
         }
+        MinesLevels.get(level).reached(player, floor + 1);
         return Optional.of(arrive(player, level, base, floor(level, base, floor + 1, true).arrivalFromAbove(), floor + 1));
     }
 
