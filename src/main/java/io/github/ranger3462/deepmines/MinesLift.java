@@ -61,7 +61,7 @@ public final class MinesLift {
             goTo(player, level, base, deepest);
             return;
         }
-        boolean team = MinesLevels.teams.apply(player).isPresent();
+        boolean team = MinesTeams.team(player).isPresent();
         player.sendSystemMessage(Component.translatable(team ? "message.deepmines.lift_team" : "message.deepmines.lift", deepest)
                 .withStyle(ChatFormatting.GOLD));
         for (int first = 1; first <= deepest; first += PER_LINE) {

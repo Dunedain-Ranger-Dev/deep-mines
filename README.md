@@ -4,7 +4,8 @@ A mining dimension for NeoForge 1.21.1 that resets on a schedule, so nobody has 
 
 - **Getting there:** build a nether-style portal frame out of **deepslate bricks** and light it with flint and steel.
   Players can build their own, or admins can build one somewhere public. It leads to the Mines' entrance hall, whose
-  ladder up takes you back out where you came in.
+  ladder up takes you back out where you came in. Servers can close the portal with `portalAnywhere = false` (for
+  when the Mines are reached another way).
 - **The Mines:** 100 floors below the entrance hall, each big rooms of rock (3 to 5 near the top, up to 16 to 25 below floor 75) joined by timbered mineshafts,
   with a ladder down in the farthest room. The deeper the floor, the better its ore, and deepslate from about floor 50.
   Rooms are common (the usual amount of ore, a cave to dig down or up into or old timbered workings), quarries (packed with ore), flooded (a deep pool
@@ -16,8 +17,12 @@ A mining dimension for NeoForge 1.21.1 that resets on a schedule, so nobody has 
   stay on, because YUNG's Better Caves needs them, but with no open space they never place water.
 - **Levels and the lift:** your level is the deepest floor you've climbed down to by ladder since the last reset.
   The lift in the entrance hall (the winch east of the ladder down) takes you straight down to any floor down to your
-  level: use it to pick a floor in chat, or sneak and use it to go to your deepest. On a team (Team Mines, coming),
+  level: use it to pick a floor in chat, or sneak and use it to go to your deepest. On a team (with Team Mines on),
   floors count only for the team, and leaving the team takes you back to your own level. Resets wipe every level.
+- **Team Mines:** with `teamMines = true`, each FTB Team gets its own Mines (its own entrance hall, floors and lift,
+  in its own stretch of the dimension), and each player in no team their own. Anyone who turns up in Mines that
+  aren't theirs (by digging across, or changing teams while inside) is sent back out. FTB Teams is optional: without
+  it, everyone is a team of one. All Mines reset together.
 - **Resets:** once `resetDays` days (default 7, in `config/deepmines-common.toml`) have passed, the Mines are wiped
   the next time the server starts. Players are warned when they arrive and every 5 minutes after, and anyone who logs
   back in to reset Mines is sent to their spawn point. Portals elsewhere keep working and make a fresh portal in the

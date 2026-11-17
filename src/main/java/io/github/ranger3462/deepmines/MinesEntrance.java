@@ -7,6 +7,7 @@ import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
+import net.minecraft.network.chat.Component;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -63,11 +64,29 @@ public final class MinesEntrance {
         player.setPortalCooldown();
     }
 
-    /** Someone heading into the Mines by a portal: remember where from. */
+    /**
+     * Whether something heading into the Mines from elsewhere is let in: always when the Mines are moving it
+     * themselves, and by the portal only with {@code portalAnywhere} on.
+     */
+    public static boolean letIn(boolean byTheMines, boolean portalAnywhere) {
+        return byTheMines || portalAnywhere;
+    }
+
+    /** Someone heading into the Mines by a portal: turned back if the portal's closed, or else remember where from. */
     @SubscribeEvent
     public static void onTravel(EntityTravelToDimensionEvent event) {
-        if (event.getDimension() != MinesPortal.MINES || !(event.getEntity() instanceof ServerPlayer player) || MOVING.contains(player.getUUID())
-                || player.level().dimension() == MinesPortal.MINES) {
+        if (event.getDimension() != MinesPortal.MINES || event.getEntity().level().dimension() == MinesPortal.MINES) {
+            return;
+        }
+        boolean byTheMines = event.getEntity() instanceof ServerPlayer moving && MOVING.contains(moving.getUUID());
+        if (!letIn(byTheMines, Config.PORTAL_ANYWHERE.get())) {
+            event.setCanceled(true);
+            if (event.getEntity() instanceof ServerPlayer player) {
+                player.displayClientMessage(Component.translatable("message.deepmines.portal_closed"), true);
+            }
+            return;
+        }
+        if (!(event.getEntity() instanceof ServerPlayer player) || byTheMines) {
             return;
         }
         CompoundTag entry = new CompoundTag();
@@ -97,7 +116,7 @@ public final class MinesEntrance {
         }
         ServerLevel mines = player.server.getLevel(MinesPortal.MINES);
         if (mines != null) {
-            MinesFloors.visit(player, mines, MinesFloors.BASE, MinesFloors.START);
+            MinesFloors.visit(player, mines, MinesTeams.base(mines, player), MinesFloors.START);
         }
     }
 }

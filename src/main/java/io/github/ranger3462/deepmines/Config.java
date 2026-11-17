@@ -23,6 +23,17 @@ public final class Config {
                     "them, so above 1 they keep theirs. Floors already built keep theirs until the reset.")
             .defineInRange("oreModifier", 1.0, 0.0, 10.0);
 
+    public static final ModConfigSpec.BooleanValue PORTAL_ANYWHERE = BUILDER
+            .comment("Whether the deepslate-brick portal leads into the Mines, wherever it's built. On until the Dwarven capital's",
+                    "entrance exists; off, the portal won't take anyone in (other ways in, and the ladder out, still work).")
+            .define("portalAnywhere", true);
+
+    public static final ModConfigSpec.BooleanValue TEAM_MINES = BUILDER
+            .comment("Team Mines: each FTB Team gets its own Mines (its own floors, in its own stretch of the dimension), and",
+                    "each player in no team their own, so no one can reach anyone else's. Off, everyone shares one Mines.",
+                    "Without FTB Teams installed, every player counts as a team of one. All Mines reset together.")
+            .define("teamMines", false);
+
     static {
         BUILDER.comment("How often each kind of room comes up on a floor, as weights (the first room is always common).")
                 .push("rooms");

@@ -78,7 +78,7 @@ public final class MinesFloors {
      */
     public static Floor floor(ServerLevel level, BlockPos base, int number, boolean fromAbove) {
         MinesFloorsData data = MinesFloorsData.get(level);
-        Optional<Floor> known = data.known(number);
+        Optional<Floor> known = data.known(base, number);
         if (known.isPresent()) {
             return known.get();
         }
@@ -87,10 +87,10 @@ public final class MinesFloors {
             long started = System.nanoTime();
             Floor floor = buildStart(level, center(base, START), random);
             DeepMines.LOGGER.info("Built floor {} of the Mines in {} ms", number, (System.nanoTime() - started) / 1_000_000);
-            data.put(floor);
+            data.put(base, floor);
             return floor;
         }
-        return buildFloor(level, center(base, number), number, rooms(number, random), random, fromAbove);
+        return buildFloor(level, base, number, rooms(number, random), random, fromAbove);
     }
 
     /** A floor's seed: the same for the same world, floor and number of resets. */
@@ -143,7 +143,8 @@ public final class MinesFloors {
      * and the room at the end players arrive at ({@code fromAbove}, by the ladder up) first. It's marked built once
      * all of it is.
      */
-    static Floor buildFloor(ServerLevel level, BlockPos center, int number, int rooms, RandomSource random, boolean fromAbove) {
+    static Floor buildFloor(ServerLevel level, BlockPos base, int number, int rooms, RandomSource random, boolean fromAbove) {
+        BlockPos center = center(base, number);
         DungeonLayout layout = DungeonLayoutGenerator.generate(random, rooms);
         Cell farthest = layout.distancesFromStart().entrySet().stream()
                 .max(Map.Entry.<Cell, Integer>comparingByValue().thenComparing(Map.Entry::getKey, Comparator.comparingInt(Cell::x).thenComparingInt(Cell::z)))
@@ -152,7 +153,7 @@ public final class MinesFloors {
         BlockPos[] down = ladderSpot(layout, center, farthest);
         Floor floor = new Floor(number, up[0], down[0], up[1], down[1]);
         MinesFloorsData data = MinesFloorsData.get(level);
-        data.startBuilding(floor);
+        data.startBuilding(base, floor);
 
         long started = System.nanoTime();
         BlockPos upRoom = MinesBuilder.roomMin(center, Cell.ORIGIN);
@@ -166,7 +167,7 @@ public final class MinesFloors {
             }
         }
         MinesBuildQueue.then(level, () -> {
-            data.put(floor);
+            data.put(base, floor);
             DeepMines.LOGGER.info("Built floor {} of the Mines ({} rooms) over {} ms", number, rooms, (System.nanoTime() - started) / 1_000_000);
         }, "floor " + number + " done");
         return floor;

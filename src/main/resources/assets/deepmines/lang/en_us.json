@@ -18,5 +18,7 @@
   "message.deepmines.lift_none": "The lift only goes down to floors you've climbed down to this week. Take the ladder down first.",
   "message.deepmines.lift_to": "Take the lift down to floor %s",
   "message.deepmines.lift_too_deep": "The lift can't take you to floor %s: it goes down to floor %s, the deepest you've climbed down to this week.",
-  "message.deepmines.lift_far": "You need to be beside the lift in the Mines' entrance hall."
+  "message.deepmines.lift_far": "You need to be beside the lift in the Mines' entrance hall.",
+  "message.deepmines.not_your_mines": "These aren't your Mines, or your team's. You climb back out.",
+  "message.deepmines.portal_closed": "The portal won't open: on this server the Mines are reached another way."
 }

@@ -30,11 +30,12 @@ public class MineLadderBlock extends Block {
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
         if (level instanceof ServerLevel server && player instanceof ServerPlayer serverPlayer) {
-            int floor = MinesFloors.floorAt(MinesFloors.BASE, pos);
+            BlockPos base = MinesTeams.baseAt(pos);
+            int floor = MinesFloors.floorAt(base, pos);
             if (down) {
-                MinesFloors.descend(serverPlayer, server, MinesFloors.BASE, floor);
+                MinesFloors.descend(serverPlayer, server, base, floor);
             } else {
-                MinesFloors.ascend(serverPlayer, server, MinesFloors.BASE, floor);
+                MinesFloors.ascend(serverPlayer, server, base, floor);
             }
         }
         return InteractionResult.sidedSuccess(level.isClientSide());

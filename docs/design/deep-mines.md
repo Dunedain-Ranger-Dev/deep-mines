@@ -49,8 +49,22 @@ A living space where players go to gather resources on a more frequent schedule 
     floors. Each week is a fresh climb.
   - **Decided:** only climbing down counts. Riding the lift never raises a level (it can't go deeper anyway), and
     neither does the operators' `/deepmines floor`.
-  - Who's on which team comes from `MinesLevels.teams`, no one until Team Mines (MINE-10) plugs FTB Teams in. A start
-    hall built before the lift was added gets it at the next reset.
+  - Who's on which team comes from Team Mines (`MinesTeams.team`): no one with it off. A start hall built before the
+    lift was added gets it at the next reset.
+- **Team Mines (MINE-10, MINE-31 to MINE-33).** Off by default (`teamMines`): everyone shares one Mines. On, each FTB
+  Team (its party team) has its own Mines, and each player in no team their own; without FTB Teams (an optional
+  dependency, `FtbTeamsLink`) every player is a team of one.
+  - **Decided:** one region per Mines in the one dimension (`MinesTeams`, `MinesRegions`). Region 0 is the shared
+    Mines at `BASE`; each team gets the next free region the first time one of them goes in, 4096 blocks south of
+    the last, with solid rock between. Each region has its own entrance hall, floors, ladders and lift, built as
+    they're reached. Floors are saved per region (by its base). Every team's floors are the same layout (same seed),
+    so no team's Mines are luckier than another's.
+  - **Kept apart:** once a second, anyone on the floors of Mines that aren't theirs (they dug across 3,000 blocks of
+    rock, or changed teams while inside) is sent back out where they came in. The rock below the floors, where the
+    portals' arrival spots are, is shared.
+  - **Resets (MINE-33):** all Mines reset together on the one schedule, so the warnings, `/deepmines when` and
+    `/deepmines reset` are the same for everyone. The regions are saved with the Mines' own data, so a reset hands
+    them out afresh.
 - **Rooms (MINE-15, MINE-36).** 49 x 49 x 40, with the doorways halfway up the walls: every room is a block of rock
   with a cave carved in it at doorway height, rock below to dig down into, and rock above to dig up into. Inside every
   doorway is a landing (solid floor, clear air) so a corridor always leads somewhere to stand. Rooms and corridors are
@@ -178,7 +192,8 @@ the `deepmines:in_mines` filter).
 | Room mix | 50 / 15 / 15 / 20 / 10 | How often common, quarry, flooded, infested and vein rooms come up, as weights (`[rooms]`) |
 | Infested rooms' mobs | See [Who holds the Mines](#who-holds-the-mines) | Which mobs infested rooms' spawners have, by tier (`infestedMobs`) |
 | Hand-built rooms | 25% | How often a hand-built room or corridor is used instead of a carved one, if there are any (`handBuilt`) |
-| Team Mines | Off (server-wide) | Ties the Mines to each FTB Team or party instead, to prevent griefing |
+| Team Mines | Off (server-wide) | Gives each FTB Team (and each player in no team) its own Mines instead, to prevent griefing (`teamMines`) |
+| Portal anywhere | On | Whether the deepslate-brick portal leads into the Mines (`portalAnywhere`, MINE-26). Turn it off once the Dwarven capital's entrance exists |
 | Ore modifier | 1.0 | How much ore the Mines have against the usual: 2 is twice as many veins in every room, 0 none (`oreModifier`, MINE-20). Hand-built rooms can only lose veins, not gain them |
 
 ## Where it stands
@@ -195,6 +210,8 @@ Built in 0.1.0 (MINE-2 to MINE-4), and tested in game on 2026-11-02:
    and player standing is designed (Kingdom Sim's `realm-politics.md`) but not built. Until both exist, what's the way
    in? Keep the deepslate portal behind a setting?
    - The capital, standing and the entrance moved to Kingdom Sim (KING-18). The portal setting stays here (MINE-26).
+   - **Built (MINE-26):** `portalAnywhere`, on for now. Off, the portal turns players back; the Mines' own trips
+     and the ladder out still work.
 2. **Depending on Dungeon Delving.** Deep Mines works on its own today. Building the floors with Dungeon Delving's
    generator makes it a required dependency, unless the generator moves into a shared library.
    - **Decided:** Dungeon Delving is a required dependency. Deep Mines uses its layout generator for each floor's
@@ -223,7 +240,7 @@ Built in 0.1.0 (MINE-2 to MINE-4), and tested in game on 2026-11-02:
 7. **Team Mines.** One region per team inside the same dimension (the way Dungeon Delving gives each run a region),
    or a dimension per team? And does each team get its own reset?
    - **Decided:** each team gets its own region. A reset wipes the whole dimension, so every team shares the
-     schedule.
+     schedule. Built in MINE-10 (see [The Mines](#the-mines)).
 8. **Staying cleared.** Once players clear a cave, does it stay clear until the next reset?
    - **Decided (MINE-24):** yes. Each spawner sends one wave and breaks, so a cleared room has nothing left to refill
      it until the reset rebuilds the floor.
