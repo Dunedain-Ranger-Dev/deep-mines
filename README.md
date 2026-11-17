@@ -14,6 +14,10 @@ A mining dimension for NeoForge 1.21.1 that resets on a schedule, so nobody has 
   built the first time someone reaches them, a little each tick so the server doesn't freeze. Around the floors is
   solid rock (stone, deepslate below Y 0), all one bare biome: no caves, structures or natural mob spawns. Aquifers
   stay on, because YUNG's Better Caves needs them, but with no open space they never place water.
+- **Levels and the lift:** your level is the deepest floor you've climbed down to by ladder since the last reset.
+  The lift in the entrance hall (the winch east of the ladder down) takes you straight down to any floor down to your
+  level: use it to pick a floor in chat, or sneak and use it to go to your deepest. On a team (Team Mines, coming),
+  floors count only for the team, and leaving the team takes you back to your own level. Resets wipe every level.
 - **Resets:** once `resetDays` days (default 7, in `config/deepmines-common.toml`) have passed, the Mines are wiped
   the next time the server starts. Players are warned when they arrive and every 5 minutes after, and anyone who logs
   back in to reset Mines is sent to their spawn point. Portals elsewhere keep working and make a fresh portal in the
@@ -24,6 +28,8 @@ Where the mod is headed: [the design doc](docs/design/deep-mines.md).
 ## Commands
 
 - `/deepmines when`: when the Mines reset.
+- `/deepmines lift <floor>`: take the lift down to a floor, beside it in the entrance hall (what clicking a floor in
+  its list runs).
 - `/deepmines reset` (operators): reset the Mines the next time the server starts.
 - `/deepmines floor <number>` (operators): go to a floor of the Mines, building it if no one has been there; 0 is the
   entrance hall. Each floor has a ladder down in its farthest room and a ladder up in its first; right-click one to

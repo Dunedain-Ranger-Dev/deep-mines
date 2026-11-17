@@ -37,6 +37,20 @@ A living space where players go to gather resources on a more frequent schedule 
     a few pieces ahead, so they load (and generate) off the server thread. Logged as "Built floor n of the Mines (r
     rooms) over ... ms". A floor's seed comes from the world's and the number of resets, so one left half built when
     the server stopped is built again the same.
+- **Levels and the lobby lift (MINE-38).** A level is the deepest floor reached by its ladder down from the floor
+  above since the last reset (`MinesLevels`). Each player has a personal level, and each team (with Team Mines on)
+  its own. The start hall's lift (a winch east of the headframe, its chain running up into the vault) takes a player
+  straight down to any floor down to their level, by its ladder up, building it first if it needs to be. Using it
+  lists the floors in chat to click on (`/deepmines lift <floor>`, only beside the lift); sneaking and using it goes
+  straight to the deepest.
+  - **Decided:** strict, solo only. Floors reached while on a team count only for the team; a player who leaves a
+    team is back to their own personal level and keeps none of the team's.
+  - **Decided:** levels are saved with the Mines' own level data, so the reset wipes every level along with the
+    floors. Each week is a fresh climb.
+  - **Decided:** only climbing down counts. Riding the lift never raises a level (it can't go deeper anyway), and
+    neither does the operators' `/deepmines floor`.
+  - Who's on which team comes from `MinesLevels.teams`, no one until Team Mines (MINE-10) plugs FTB Teams in. A start
+    hall built before the lift was added gets it at the next reset.
 - **Rooms (MINE-15, MINE-36).** 49 x 49 x 40, with the doorways halfway up the walls: every room is a block of rock
   with a cave carved in it at doorway height, rock below to dig down into, and rock above to dig up into. Inside every
   doorway is a landing (solid floor, clear air) so a corridor always leads somewhere to stand. Rooms and corridors are
@@ -224,7 +238,7 @@ Each goal has its own task under the Deep Mines project in Jira, with sub-tasks 
 | Ore: plenty, better the deeper you go | MINE-7 | MINE-18 to MINE-20, MINE-35 |
 | Infested caves: fight first, then mine | MINE-8 | MINE-22 to MINE-25 |
 | Access only from the Dwarven capital | MINE-9 | MINE-26 here; the rest is Kingdom Sim's KING-18 (KING-19 to 21) |
-| Team Mines (setting) | MINE-10 | MINE-30 to MINE-33 |
+| Team Mines (setting) | MINE-10 | MINE-30 to MINE-33, MINE-38 (levels and the lobby lift) |
 | Weekly reset for everyone; reset frequency setting | MINE-4 | Built |
 
 The floors (MINE-6) come first: the ore and mob work both place markers in its pieces.
