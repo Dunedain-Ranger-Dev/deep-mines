@@ -4,7 +4,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.function.Function;
 
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -22,13 +21,10 @@ import net.minecraft.world.level.saveddata.SavedData;
  * <li>Saved with the Mines' own level data, so the reset (which wipes the Mines' folder) wipes every level with the
  * floors: each week is a fresh climb.</li>
  * </ul>
- * Who's on which team is {@link #teams}: no one, until Team Mines (MINE-10) plugs FTB Teams in.
+ * Who's on which team is {@link MinesTeams#team}: no one, with Team Mines off.
  */
 public class MinesLevels extends SavedData {
     private static final String NAME = DeepMines.MODID + "_levels";
-
-    /** Which team a player is on in the Mines, if any. No one is, unless Team Mines says otherwise. */
-    public static Function<ServerPlayer, Optional<UUID>> teams = player -> Optional.empty();
 
     private final Map<UUID, Integer> players = new HashMap<>();
     private final Map<UUID, Integer> teamLevels = new HashMap<>();
@@ -44,7 +40,7 @@ public class MinesLevels extends SavedData {
 
     /** A player's level: their team's, if they're on one, or else their own. 0 if they've not been down a floor yet. */
     public int level(ServerPlayer player) {
-        Optional<UUID> team = teams.apply(player);
+        Optional<UUID> team = MinesTeams.team(player);
         return team.isPresent() ? teamLevel(team.get()) : personal(player.getUUID());
     }
 
@@ -59,7 +55,7 @@ public class MinesLevels extends SavedData {
 
     /** A player has reached a floor going down: it raises their team's level, if they're on one, or else their own. */
     public void reached(ServerPlayer player, int floor) {
-        Optional<UUID> team = teams.apply(player);
+        Optional<UUID> team = MinesTeams.team(player);
         Map<UUID, Integer> levels = team.isPresent() ? teamLevels : players;
         UUID id = team.orElse(player.getUUID());
         if (floor > levels.getOrDefault(id, 0)) {

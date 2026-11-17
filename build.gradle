@@ -104,6 +104,9 @@ dependencies {
     implementation "curse.maven:custom-portal-api-reforged-902717:6744404" // cpapireforged-neo-1.21.1-1.2.2
 
     compileOnly dungeonDelving
+    // FTB Teams, for Team Mines: optional, only used when it's installed (FtbTeamsLink)
+    compileOnly "curse.maven:ftb-teams-forge-404468:8724782"     // 2101.1.11
+    compileOnly "curse.maven:ftb-library-forge-404465:9008089"
     // Left out of runData, which doesn't need them (and Apotheosis' own data generators fail without Gateways).
     if (!gradle.startParameter.taskNames.any { it.toLowerCase().contains('rundata') }) {
         localRuntime dungeonDelving
