@@ -1004,22 +1004,28 @@ public class MinesTests {
         helper.succeed();
     }
 
-    /** portalAnywhere: on, the portal lets players in; off, it doesn't, but the Mines' own trips still go through. */
+    /**
+     * The portal setting: open, the portal lets players in; closed, it doesn't, but the Mines' own trips (and Kingdom
+     * Sim's gate) still go through. AUTO is open, unless Kingdom Sim is installed.
+     */
     @GameTest(template = EMPTY)
     public static void thePortalSettingWorksBothWays(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         ServerPlayer player = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "portal_tester"));
-        boolean was = Config.PORTAL_ANYWHERE.get();
+        Config.Portal was = Config.PORTAL.get();
         try {
             for (boolean anywhere : new boolean[] { true, false }) {
-                Config.PORTAL_ANYWHERE.set(anywhere);
+                Config.PORTAL.set(anywhere ? Config.Portal.OPEN : Config.Portal.CLOSED);
                 var travel = new net.neoforged.neoforge.event.entity.EntityTravelToDimensionEvent(player, MinesPortal.MINES);
                 net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(travel);
-                helper.assertTrue(travel.isCanceled() != anywhere, "with portalAnywhere " + anywhere + ", going in is " + (travel.isCanceled() ? "stopped" : "let through"));
+                helper.assertTrue(travel.isCanceled() != anywhere, "with the portal open " + anywhere + ", going in is " + (travel.isCanceled() ? "stopped" : "let through"));
             }
-            helper.assertTrue(MinesEntrance.letIn(true, false), "the Mines' own trips go through with it off");
+            helper.assertTrue(MinesEntrance.letIn(true, false), "the Mines' own trips go through with it closed");
+            helper.assertTrue(Config.portalOpen(Config.Portal.AUTO, false) && !Config.portalOpen(Config.Portal.AUTO, true),
+                    "AUTO is open without Kingdom Sim, and closed with it");
+            helper.assertTrue(Config.portalOpen(Config.Portal.OPEN, true) && !Config.portalOpen(Config.Portal.CLOSED, false), "OPEN and CLOSED are always");
         } finally {
-            Config.PORTAL_ANYWHERE.set(was);
+            Config.PORTAL.set(was);
         }
         helper.succeed();
     }

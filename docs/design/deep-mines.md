@@ -193,7 +193,7 @@ the `deepmines:in_mines` filter).
 | Infested rooms' mobs | See [Who holds the Mines](#who-holds-the-mines) | Which mobs infested rooms' spawners have, by tier (`infestedMobs`) |
 | Hand-built rooms | 25% | How often a hand-built room or corridor is used instead of a carved one, if there are any (`handBuilt`) |
 | Team Mines | Off (server-wide) | Gives each FTB Team (and each player in no team) its own Mines instead, to prevent griefing (`teamMines`) |
-| Portal anywhere | On | Whether the deepslate-brick portal leads into the Mines (`portalAnywhere`, MINE-26). Turn it off once the Dwarven capital's entrance exists |
+| Portal | Auto | Whether the deepslate-brick portal leads into the Mines (`portal`, MINE-26, MINE-9): AUTO is open unless Kingdom Sim is installed, whose mine gate at the Dwarven capital is then the way in; OPEN or CLOSED always |
 | Ore modifier | 1.0 | How much ore the Mines have against the usual: 2 is twice as many veins in every room, 0 none (`oreModifier`, MINE-20). Hand-built rooms can only lose veins, not gain them |
 
 ## Where it stands
@@ -212,6 +212,10 @@ Built in 0.1.0 (MINE-2 to MINE-4), and tested in game on 2026-11-02:
    - The capital, standing and the entrance moved to Kingdom Sim (KING-18). The portal setting stays here (MINE-26).
    - **Built (MINE-26):** `portalAnywhere`, on for now. Off, the portal turns players back; the Mines' own trips
      and the ladder out still work.
+   - **Built (MINE-9, with Kingdom Sim's KING-18):** Kingdom Sim's mine gate at the dwarves' capital, Karak Varn,
+     takes players in good standing with the dwarves into the Mines (`MinesEntrance.enter`), and the start hall's
+     ladder up brings them back to the gate. The setting became `portal`: AUTO (the default) closes the portal when
+     Kingdom Sim is installed, so the gate is the only way in; OPEN and CLOSED override it.
 2. **Depending on Dungeon Delving.** Deep Mines works on its own today. Building the floors with Dungeon Delving's
    generator makes it a required dependency, unless the generator moves into a shared library.
    - **Decided:** Dungeon Delving is a required dependency. Deep Mines uses its layout generator for each floor's

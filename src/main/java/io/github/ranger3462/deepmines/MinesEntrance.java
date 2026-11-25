@@ -14,6 +14,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.EntityTravelToDimensionEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
@@ -66,10 +67,33 @@ public final class MinesEntrance {
 
     /**
      * Whether something heading into the Mines from elsewhere is let in: always when the Mines are moving it
-     * themselves, and by the portal only with {@code portalAnywhere} on.
+     * themselves (or another mod's way in, {@link #enter}), and by the portal only while it's open ({@code portal}).
      */
-    public static boolean letIn(boolean byTheMines, boolean portalAnywhere) {
-        return byTheMines || portalAnywhere;
+    public static boolean letIn(boolean byTheMines, boolean portalOpen) {
+        return byTheMines || portalOpen;
+    }
+
+    /** Whether the portal leads in, by the {@code portal} setting and whether Kingdom Sim is installed. */
+    public static boolean portalOpen() {
+        return Config.portalOpen(Config.PORTAL.get(), ModList.get().isLoaded("ddkingdom"));
+    }
+
+    /**
+     * Takes a player into the Mines from wherever they are, by another mod's way in (Kingdom Sim's mine gate at the
+     * Dwarven capital), whatever the {@code portal} setting: to their own Mines' start hall, and the ladder up there
+     * brings them back here. Returns whether they went (not if the Mines aren't loaded, or they're already in).
+     */
+    public static boolean enter(ServerPlayer player) {
+        ServerLevel mines = player.server.getLevel(MinesPortal.MINES);
+        if (mines == null || player.level().dimension() == MinesPortal.MINES) {
+            return false;
+        }
+        CompoundTag entry = new CompoundTag();
+        entry.putString("dimension", player.level().dimension().location().toString());
+        entry.put("pos", NbtUtils.writeBlockPos(player.blockPosition()));
+        player.getPersistentData().put(ENTRY_TAG, entry);
+        MinesFloors.visit(player, mines, MinesTeams.base(mines, player), MinesFloors.START);
+        return true;
     }
 
     /** Someone heading into the Mines by a portal: turned back if the portal's closed, or else remember where from. */
@@ -79,7 +103,7 @@ public final class MinesEntrance {
             return;
         }
         boolean byTheMines = event.getEntity() instanceof ServerPlayer moving && MOVING.contains(moving.getUUID());
-        if (!letIn(byTheMines, Config.PORTAL_ANYWHERE.get())) {
+        if (!letIn(byTheMines, portalOpen())) {
             event.setCanceled(true);
             if (event.getEntity() instanceof ServerPlayer player) {
                 player.displayClientMessage(Component.translatable("message.deepmines.portal_closed"), true);
