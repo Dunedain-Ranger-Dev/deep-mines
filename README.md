@@ -4,8 +4,9 @@ A mining dimension for NeoForge 1.21.1 that resets on a schedule, so nobody has 
 
 - **Getting there:** build a nether-style portal frame out of **deepslate bricks** and light it with flint and steel.
   Players can build their own, or admins can build one somewhere public. It leads to the Mines' entrance hall, whose
-  ladder up takes you back out where you came in. Servers can close the portal with `portalAnywhere = false` (for
-  when the Mines are reached another way).
+  ladder up takes you back out where you came in. With Kingdom Sim installed, the portal closes (`portal = "AUTO"`)
+  and the way in is the dwarves' mine gate at their capital, Karak Varn, for players in good standing with them.
+  `portal = "OPEN"` or `"CLOSED"` sets it either way.
 - **The Mines:** 100 floors below the entrance hall, each big rooms of rock (3 to 5 near the top, up to 16 to 25 below floor 75) joined by timbered mineshafts,
   with a ladder down in the farthest room. The deeper the floor, the better its ore, and deepslate from about floor 50.
   Rooms are common (the usual amount of ore, a cave to dig down or up into or old timbered workings), quarries (packed with ore), flooded (a deep pool

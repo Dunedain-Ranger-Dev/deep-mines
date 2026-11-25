@@ -23,10 +23,24 @@ public final class Config {
                     "them, so above 1 they keep theirs. Floors already built keep theirs until the reset.")
             .defineInRange("oreModifier", 1.0, 0.0, 10.0);
 
-    public static final ModConfigSpec.BooleanValue PORTAL_ANYWHERE = BUILDER
-            .comment("Whether the deepslate-brick portal leads into the Mines, wherever it's built. On until the Dwarven capital's",
-                    "entrance exists; off, the portal won't take anyone in (other ways in, and the ladder out, still work).")
-            .define("portalAnywhere", true);
+    /** Whether the deepslate-brick portal leads into the Mines. */
+    public enum Portal {
+        /** Open, unless Kingdom Sim is installed: then the way in is its mine gate at the Dwarven capital. */
+        AUTO,
+        OPEN,
+        CLOSED
+    }
+
+    public static final ModConfigSpec.EnumValue<Portal> PORTAL = BUILDER
+            .comment("Whether the deepslate-brick portal leads into the Mines, wherever it's built. AUTO: open, unless Kingdom Sim is",
+                    "installed, whose mine gate at the Dwarven capital is then the way in. OPEN or CLOSED: always. Closed, the portal",
+                    "won't take anyone in (Kingdom Sim's gate, and the ladder out, still work).")
+            .defineEnum("portal", Portal.AUTO);
+
+    /** Whether the portal leads in now: as {@code portal} says, with AUTO open unless Kingdom Sim is installed. */
+    public static boolean portalOpen(Portal setting, boolean kingdomSim) {
+        return setting == Portal.OPEN || setting == Portal.AUTO && !kingdomSim;
+    }
 
     public static final ModConfigSpec.BooleanValue TEAM_MINES = BUILDER
             .comment("Team Mines: each FTB Team gets its own Mines (its own floors, in its own stretch of the dimension), and",
